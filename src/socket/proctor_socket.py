@@ -5,15 +5,12 @@ import threading
 class ProctorSocketClient:
 
     def __init__(self, server_url, token, proctor_session_id, test_id, schedule_id):
-
         self.server_url = server_url
-
         self.token = token
 
         self.proctor_session_id = str(proctor_session_id)
 
         self.test_id = int(test_id)
-
         self.schedule_id = int(schedule_id)
 
         self.connected = False
@@ -99,12 +96,43 @@ class ProctorSocketClient:
     def start_background(self):
 
         if self.connection_thread and self.connection_thread.is_alive():
-
             return
 
         self.connection_thread = threading.Thread(target=self.connect, daemon=True)
 
         self.connection_thread.start()
+
+    def notify_proctor_terminated(self):
+
+        try:
+
+            if not self.sio.connected:
+
+                print(
+                    "[SOCKET] Cannot send termination event. "
+                    "Socket is not connected."
+                )
+
+                return False
+
+            self.sio.emit(
+                "proctor-process-terminated",
+                {
+                    "proctor_session_id": str(self.proctor_session_id),
+                    "test_id": int(self.test_id),
+                    "schedule_id": int(self.schedule_id),
+                },
+            )
+
+            print("[SOCKET] Proctor termination event sent.")
+
+            return True
+
+        except Exception as error:
+
+            print("[SOCKET] Failed to send termination event:", error)
+
+            return False
 
     def disconnect(self):
 
