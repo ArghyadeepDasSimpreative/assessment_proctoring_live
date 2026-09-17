@@ -1,0 +1,8 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Classes\skolariq-proctor]
+@="URL:Skolariq Proctor"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\skolariq-proctor\shell\open\command]
+@="cmd.exe /c \"D:\\Arghyadeep2\\assessment_proctoring_live\\launch_proctor.bat\" \"%1\""

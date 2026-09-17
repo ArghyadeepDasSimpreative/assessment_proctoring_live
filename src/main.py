@@ -276,6 +276,7 @@
 
 # def start_kiosk(
 #     token,
+#     proctor_socket=None,
 # ):
 #     bootstrap_url = build_bootstrap_url(token)
 
@@ -285,7 +286,13 @@
 
 #     print("[PROCTOR] Bootstrap URL prepared.")
 
-#     kiosk = KioskManager()
+#     kiosk = KioskManager(proctor_socket=proctor_socket)
+
+#     if proctor_socket is not None:
+#         print("[PROCTOR] Proctor socket attached " "to kiosk manager.")
+
+#     else:
+#         print("[PROCTOR] Kiosk manager started " "without proctor socket.")
 
 #     try:
 #         process = kiosk.start(bootstrap_url)
@@ -317,7 +324,7 @@
 #     allow_development_escape = app_environment != "production"
 
 #     lockdown = KeyboardLockdownManager(
-#         allow_development_escape=(allow_development_escape)
+#         allow_development_escape=allow_development_escape
 #     )
 
 #     lockdown.start()
@@ -330,14 +337,16 @@
 # ):
 #     try:
 #         socket_client = ProctorSocketClient(
-#             server_url=(get_socket_server_url()),
+#             server_url=get_socket_server_url(),
 #             token=session.get("raw_token"),
-#             proctor_session_id=(session["proctor_session_id"]),
+#             proctor_session_id=session["proctor_session_id"],
 #             test_id=session["test_id"],
 #             schedule_id=session["schedule_id"],
 #         )
 
-#         def exam_completed(data):
+#         def exam_completed(
+#             data,
+#         ):
 #             global exam_completed_flag
 
 #             print()
@@ -354,6 +363,8 @@
 #         socket_client.exam_completed_callback = exam_completed
 
 #         socket_client.start_background()
+
+#         print("[PROCTOR] Proctor socket " "startup requested.")
 
 #         return socket_client
 
@@ -381,6 +392,7 @@
 
 #         if "x" in face and "y" in face and "x2" in face and "y2" in face:
 #             x = int(face["x"])
+
 #             y = int(face["y"])
 
 #             width = int(face["x2"] - face["x"])
@@ -389,30 +401,45 @@
 
 #         elif "x" in face and "y" in face and "w" in face and "h" in face:
 #             x = int(face["x"])
+
 #             y = int(face["y"])
+
 #             width = int(face["w"])
+
 #             height = int(face["h"])
 
 #         elif "x" in face and "y" in face and "width" in face and "height" in face:
 #             x = int(face["x"])
+
 #             y = int(face["y"])
+
 #             width = int(face["width"])
+
 #             height = int(face["height"])
 
 #         elif "bbox" in face and len(face["bbox"]) >= 4:
 #             x = int(face["bbox"][0])
+
 #             y = int(face["bbox"][1])
+
 #             width = int(face["bbox"][2])
+
 #             height = int(face["bbox"][3])
 
 #     elif isinstance(
 #         face,
-#         (list, tuple),
+#         (
+#             list,
+#             tuple,
+#         ),
 #     ):
 #         if len(face) >= 4:
 #             x = int(face[0])
+
 #             y = int(face[1])
+
 #             width = int(face[2])
+
 #             height = int(face[3])
 
 #     if x is None or y is None or width is None or height is None:
@@ -478,10 +505,10 @@
 #     return {
 #         "phone_detected": phone_detected,
 #         "book_detected": book_detected,
-#         "extra_person_detected": (extra_person_detected),
-#         "phone_detections": (phone_detections),
-#         "book_detections": (book_detections),
-#         "person_detections": (person_detections),
+#         "extra_person_detected": extra_person_detected,
+#         "phone_detections": phone_detections,
+#         "book_detections": book_detections,
+#         "person_detections": person_detections,
 #     }
 
 
@@ -811,6 +838,19 @@
 #     proctoring_api,
 #     pending_violations,
 # ):
+#     """
+#     Send queued proctoring violations while preserving
+#     the exact relationship between each violation and
+#     its evidence file.
+
+#     The violation's local file_path is intentionally
+#     removed from the JSON payload. Instead, evidence_files
+#     contains an explicit violation_index -> file path mapping.
+
+#     This prevents evidence paths from being attached to the
+#     wrong violation when some violations have no evidence.
+#     """
+
 #     if proctoring_api is None or not pending_violations:
 #         return pending_violations
 
@@ -833,15 +873,49 @@
 #             None,
 #         )
 
+#         violation_index = len(violations)
+
 #         violations.append(violation_copy)
 
-#         if file_path:
-#             evidence_files.append(file_path)
+#         if not file_path:
+#             continue
+
+#         file_path_string = str(file_path).strip()
+
+#         if not file_path_string:
+#             continue
+
+#         if not os.path.isfile(file_path_string):
+#             print(
+#                 "[API] Evidence file is missing " "for pending violation:",
+#                 file_path_string,
+#             )
+
+#             continue
+
+#         evidence_files.append(
+#             {
+#                 "violation_index": violation_index,
+#                 "path": file_path_string,
+#             }
+#         )
+
+#         print(
+#             "[API] Evidence mapping prepared "
+#             f"| violation_index={violation_index} "
+#             f"| path={file_path_string}"
+#         )
 
 #     if not violations:
 #         return []
 
 #     try:
+#         print(
+#             "[API] Preparing violation batch "
+#             f"| violations={len(violations)} "
+#             f"| evidence_files={len(evidence_files)}"
+#         )
+
 #         result = proctoring_api.send_violations(
 #             violations=violations,
 #             evidence_files=evidence_files,
@@ -1219,9 +1293,9 @@
 #                         False,
 #                     )
 #                 ),
-#                 "PHONE_DETECTED": (object_anomalies["phone_detected"]),
-#                 "BOOK_DETECTED": (object_anomalies["book_detected"]),
-#                 "EXTRA_PERSON": (object_anomalies["extra_person_detected"]),
+#                 "PHONE_DETECTED": object_anomalies["phone_detected"],
+#                 "BOOK_DETECTED": object_anomalies["book_detected"],
+#                 "EXTRA_PERSON": object_anomalies["extra_person_detected"],
 #                 "BODY_LEAN_LEFT": bool(
 #                     posture_result.get(
 #                         "leaning_left",
@@ -1277,8 +1351,8 @@
 #         if pending_violations:
 
 #             pending_violations = send_pending_violations(
-#                 proctoring_api=(proctoring_api),
-#                 pending_violations=(pending_violations),
+#                 proctoring_api=proctoring_api,
+#                 pending_violations=pending_violations,
 #             )
 
 #             pipeline["pending_violations"] = pending_violations
@@ -1435,8 +1509,8 @@
 #             if pending_violations and proctoring_api is not None:
 
 #                 pending_violations = send_pending_violations(
-#                     proctoring_api=(proctoring_api),
-#                     pending_violations=(pending_violations),
+#                     proctoring_api=proctoring_api,
+#                     pending_violations=pending_violations,
 #                 )
 
 #                 pipeline["pending_violations"] = pending_violations
@@ -1617,9 +1691,20 @@
 
 #         print("[PROCTOR] Starting secure exam " "environment...")
 
-#         kiosk, _ = start_kiosk(token)
-
 #         socket_client = start_proctor_socket(session)
+
+#         if socket_client is not None:
+
+#             print("[PROCTOR] Socket client created " "successfully.")
+
+#         else:
+
+#             print("[PROCTOR] WARNING: Socket client " "could not be created.")
+
+#         kiosk, _ = start_kiosk(
+#             token,
+#             proctor_socket=socket_client,
+#         )
 
 #         keyboard_lockdown = start_keyboard_lockdown()
 
@@ -1641,7 +1726,7 @@
 
 #         terminate_startup_failure(
 #             kiosk=kiosk,
-#             keyboard_lockdown=(keyboard_lockdown),
+#             keyboard_lockdown=keyboard_lockdown,
 #             socket_client=socket_client,
 #             pipeline=pipeline,
 #             error=error,
@@ -1691,11 +1776,11 @@
 # if __name__ == "__main__":
 #     main()
 
-
 import argparse
 import os
 import sys
 import time
+import threading
 
 from urllib.parse import (
     parse_qs,
@@ -2028,7 +2113,23 @@ def start_keyboard_lockdown():
 
 def start_proctor_socket(
     session,
+    tracking_start_event=None,
 ):
+    """
+    Start the native Socket.IO client.
+
+    Backward compatibility:
+    - tracking_start_event is optional.
+    - Existing calls that pass only session continue to work.
+
+    Secure kiosk behavior:
+    - When tracking_start_event is supplied, Python listens for
+      "proctor-tracking-start".
+    - Camera/microphone may already be active before this event.
+    - Violation detection remains paused until the validated
+      frontend signal reaches Python through Node.
+    """
+
     try:
         socket_client = ProctorSocketClient(
             server_url=get_socket_server_url(),
@@ -2055,6 +2156,129 @@ def start_proctor_socket(
             exam_completed_flag = True
 
         socket_client.exam_completed_callback = exam_completed
+
+        if tracking_start_event is not None:
+
+            expected_session_id = str(
+                session.get(
+                    "proctor_session_id",
+                    "",
+                )
+            )
+
+            expected_test_id = str(
+                session.get(
+                    "test_id",
+                    "",
+                )
+            )
+
+            expected_schedule_id = str(
+                session.get(
+                    "schedule_id",
+                    "",
+                )
+            )
+
+            def proctor_tracking_start(
+                data,
+            ):
+                payload = (
+                    data
+                    if isinstance(
+                        data,
+                        dict,
+                    )
+                    else {}
+                )
+
+                received_session_id = str(
+                    payload.get(
+                        "proctor_session_id",
+                        "",
+                    )
+                )
+
+                received_test_id = str(
+                    payload.get(
+                        "test_id",
+                        "",
+                    )
+                )
+
+                received_schedule_id = str(
+                    payload.get(
+                        "schedule_id",
+                        "",
+                    )
+                )
+
+                if (
+                    not received_session_id
+                    or not received_test_id
+                    or not received_schedule_id
+                ):
+                    print(
+                        "[SOCKET][TRACKING START IGNORED] "
+                        "Missing session/exam/schedule information."
+                    )
+
+                    return
+
+                if (
+                    received_session_id != expected_session_id
+                    or received_test_id != expected_test_id
+                    or received_schedule_id != expected_schedule_id
+                ):
+                    print(
+                        "[SOCKET][TRACKING START IGNORED] "
+                        "Received event does not match the active proctor session."
+                    )
+
+                    return
+
+                if tracking_start_event.is_set():
+                    print(
+                        "[SOCKET][TRACKING START] "
+                        "Duplicate start signal received; tracking is already active."
+                    )
+
+                    return
+
+                tracking_start_event.set()
+
+                print()
+
+                print(
+                    "[SOCKET][TRACKING START] "
+                    "Validated frontend start signal received."
+                )
+
+                print("[PROCTOR] Violation tracking is now ACTIVE.")
+
+            sio_client = getattr(
+                socket_client,
+                "sio",
+                None,
+            )
+
+            if sio_client is None or not hasattr(
+                sio_client,
+                "on",
+            ):
+                raise RuntimeError(
+                    "Socket client does not expose a Socket.IO event interface."
+                )
+
+            sio_client.on(
+                "proctor-tracking-start",
+                proctor_tracking_start,
+            )
+
+            print(
+                "[PROCTOR] Tracking start listener registered. "
+                "Violation tracking will remain paused until the secure exam page signals readiness."
+            )
 
         socket_client.start_background()
 
@@ -2347,6 +2571,7 @@ def initialize_proctoring_pipeline(
             "evidence_store": evidence_store,
             "anomaly_manager": anomaly_manager,
             "proctoring_api": proctoring_api,
+            "proctor_socket": None,
             "pending_violations": [],
         }
 
@@ -2531,6 +2756,7 @@ def queue_api_violations(
 def send_pending_violations(
     proctoring_api,
     pending_violations,
+    proctor_socket=None,
 ):
     """
     Send queued proctoring violations while preserving
@@ -2543,6 +2769,14 @@ def send_pending_violations(
 
     This prevents evidence paths from being attached to the
     wrong violation when some violations have no evidence.
+
+    Backward compatibility:
+    - proctor_socket is optional.
+    - Existing two-argument calls continue to work unchanged.
+
+    New behavior:
+    - Socket.IO notification is emitted only AFTER the REST API
+      confirms that the violation batch was recorded successfully.
     """
 
     if proctoring_api is None or not pending_violations:
@@ -2552,6 +2786,8 @@ def send_pending_violations(
 
     evidence_files = []
 
+    socket_violations = []
+
     for violation in pending_violations:
 
         if not isinstance(
@@ -2559,6 +2795,8 @@ def send_pending_violations(
             dict,
         ):
             continue
+
+        original_violation = dict(violation)
 
         violation_copy = dict(violation)
 
@@ -2570,6 +2808,8 @@ def send_pending_violations(
         violation_index = len(violations)
 
         violations.append(violation_copy)
+
+        socket_violations.append(original_violation)
 
         if not file_path:
             continue
@@ -2626,6 +2866,71 @@ def send_pending_violations(
     ):
         print("[API] Violation batch sent " "successfully. " f"Count={len(violations)}")
 
+        # Only emit the real-time Socket.IO notification after
+        # the backend REST API has confirmed successful persistence.
+        #
+        # A socket failure must not put the already-saved violation
+        # back into the REST retry queue, otherwise duplicate DB rows
+        # could be created later.
+        if proctor_socket is not None:
+
+            notify_method = getattr(
+                proctor_socket,
+                "notify_proctor_violation",
+                None,
+            )
+
+            if callable(notify_method):
+
+                for (
+                    violation_index,
+                    socket_violation,
+                ) in enumerate(socket_violations):
+
+                    try:
+                        violation_type = (
+                            socket_violation.get("violation_type")
+                            or socket_violation.get("event_type")
+                            or "UNKNOWN"
+                        )
+
+                        print(
+                            "[SOCKET][VIOLATION AFTER API SUCCESS] "
+                            f"violation_index={violation_index} "
+                            f"| violation_type={violation_type}"
+                        )
+
+                        emitted = notify_method(socket_violation)
+
+                        if emitted:
+                            print(
+                                "[SOCKET][VIOLATION EMISSION REQUESTED] "
+                                f"violation_type={violation_type}"
+                            )
+
+                        else:
+                            print(
+                                "[SOCKET][VIOLATION EMISSION FAILED] "
+                                f"violation_type={violation_type}"
+                            )
+
+                    except Exception as socket_error:
+                        print(
+                            "[SOCKET][VIOLATION EMISSION ERROR] "
+                            f"violation_index={violation_index} "
+                            f"| error={socket_error}"
+                        )
+
+            else:
+                print(
+                    "[SOCKET][VIOLATION NOT EMITTED] "
+                    "Socket client does not provide "
+                    "notify_proctor_violation()."
+                )
+
+        # REST persistence succeeded, so clear these violations
+        # regardless of whether the real-time socket notification
+        # was delivered successfully.
         return []
 
     reason = result.get("reason")
@@ -2666,6 +2971,8 @@ def run_proctoring_detection_loop(
 
     proctoring_api = pipeline.get("proctoring_api")
 
+    proctor_socket = pipeline.get("proctor_socket")
+
     pending_violations = pipeline.get("pending_violations")
 
     if pending_violations is None:
@@ -2673,13 +2980,40 @@ def run_proctoring_detection_loop(
 
         pipeline["pending_violations"] = pending_violations
 
+    tracking_start_event = pipeline.get("tracking_start_event")
+
+    # Backward compatibility:
+    # If an older caller invokes this loop without the new
+    # tracking_start_event, preserve the previous behavior
+    # and begin detection immediately.
+    if tracking_start_event is None:
+        tracking_start_event = threading.Event()
+
+        tracking_start_event.set()
+
+        pipeline["tracking_start_event"] = tracking_start_event
+
     frame_count = 0
 
     last_log_time = 0.0
 
+    last_waiting_log_time = 0.0
+
+    tracking_started_logged = False
+
     print()
 
-    print("[PROCTOR] Detection pipeline started.")
+    if tracking_start_event.is_set():
+
+        print("[PROCTOR] Detection pipeline started.")
+
+    else:
+
+        print("[PROCTOR] Camera and microphone are active.")
+
+        print(
+            "[PROCTOR] Violation tracking is PAUSED until the secure exam page signals readiness."
+        )
 
     while True:
 
@@ -2699,6 +3033,38 @@ def run_proctoring_detection_loop(
             time.sleep(0.05)
 
             continue
+
+        # Keep consuming camera frames so the camera remains warm and
+        # does not build up a stale capture buffer, but do not execute
+        # any detector, anomaly timer, evidence capture, REST request,
+        # or violation socket emission before the frontend start signal.
+        if not tracking_start_event.is_set():
+
+            current_time = time.time()
+
+            if current_time - last_waiting_log_time >= 2.0:
+
+                print(
+                    "[PROCTOR] Waiting for secure exam page. Violation tracking remains paused."
+                )
+
+                last_waiting_log_time = current_time
+
+            time.sleep(0.02)
+
+            continue
+
+        if not tracking_started_logged:
+
+            tracking_started_logged = True
+
+            print()
+
+            print(
+                "[PROCTOR] Frontend readiness confirmed. Starting violation tracking."
+            )
+
+            print("[PROCTOR] Detection pipeline started.")
 
         frame_count += 1
 
@@ -3047,6 +3413,7 @@ def run_proctoring_detection_loop(
             pending_violations = send_pending_violations(
                 proctoring_api=proctoring_api,
                 pending_violations=pending_violations,
+                proctor_socket=proctor_socket,
             )
 
             pipeline["pending_violations"] = pending_violations
@@ -3200,11 +3567,14 @@ def run_proctor_session(
 
             proctoring_api = pipeline.get("proctoring_api")
 
+            proctor_socket = pipeline.get("proctor_socket")
+
             if pending_violations and proctoring_api is not None:
 
                 pending_violations = send_pending_violations(
                     proctoring_api=proctoring_api,
                     pending_violations=pending_violations,
+                    proctor_socket=proctor_socket,
                 )
 
                 pipeline["pending_violations"] = pending_violations
@@ -3334,6 +3704,14 @@ def main():
 
     exam_completed_flag = False
 
+    # This event gates every detector/anomaly operation.
+    #
+    # Camera and microphone are initialized before the kiosk opens,
+    # but this event remains unset until AssessmentsNewPage has
+    # rendered, joined the secure socket room, and Node forwards
+    # "proctor-tracking-start" to this Python client.
+    tracking_start_event = threading.Event()
+
     token = get_launch_token()
 
     try:
@@ -3354,9 +3732,13 @@ def main():
 
     print("[PROCTOR] Launch token validated.")
 
+    safe_session_log = {
+        key: value for key, value in session.items() if key != "raw_token"
+    }
+
     print(
         "[PROCTOR] Session:",
-        session,
+        safe_session_log,
     )
 
     kiosk = None
@@ -3385,7 +3767,21 @@ def main():
 
         print("[PROCTOR] Starting secure exam " "environment...")
 
-        socket_client = start_proctor_socket(session)
+        # Attach the new tracking gate before starting the socket.
+        # The detection loop will keep the camera/microphone alive,
+        # but all detector/anomaly/evidence work remains paused until
+        # this event is set by the validated socket start signal.
+        pipeline["tracking_start_event"] = tracking_start_event
+
+        socket_client = start_proctor_socket(
+            session,
+            tracking_start_event=tracking_start_event,
+        )
+
+        # Attach the same live socket client to the running pipeline.
+        # This allows successfully persisted REST violations to be
+        # forwarded to Node and then broadcast to the browser room.
+        pipeline["proctor_socket"] = socket_client
 
         if socket_client is not None:
 
@@ -3393,7 +3789,10 @@ def main():
 
         else:
 
-            print("[PROCTOR] WARNING: Socket client " "could not be created.")
+            raise RuntimeError(
+                "Secure proctor socket could not be started. "
+                "The exam cannot begin without the tracking-start channel."
+            )
 
         kiosk, _ = start_kiosk(
             token,
