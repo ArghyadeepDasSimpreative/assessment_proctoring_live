@@ -11,11 +11,40 @@
 #         "recovery_grace": 0.0,
 #     }
 
-#     def __init__(self, evidence_store):
+#     def __init__(
+#         self,
+#         evidence_store,
+#         socket_client=None,
+#     ):
 #         if evidence_store is None:
 #             raise ValueError("AnomalyManager requires an evidence_store.")
 
 #         self.evidence_store = evidence_store
+
+#         # --------------------------------------------------------
+#         # OPTIONAL SOCKET CLIENT
+#         # --------------------------------------------------------
+#         #
+#         # Fully backward compatible:
+#         #
+#         # Existing:
+#         #
+#         #   AnomalyManager(evidence_store)
+#         #
+#         # still works exactly as before.
+#         #
+#         # New:
+#         #
+#         #   AnomalyManager(
+#         #       evidence_store,
+#         #       socket_client=proctor_socket,
+#         #   )
+#         #
+#         # When supplied, confirmed anomalies that actually produce
+#         # evidence/api_violation can also be emitted over Socket.IO.
+#         # --------------------------------------------------------
+
+#         self.socket_client = socket_client
 
 #         self.rules = {
 #             "NO_FACE": {
@@ -108,15 +137,187 @@
 #         self.states = {}
 
 #         print("[ANOMALY] Manager initialized.")
+
 #         print(f"[ANOMALY] {len(self.rules)} anomaly rules loaded.")
 
-#     def _get_rule(self, event_type):
+#     # ============================================================
+#     # SOCKET CLIENT
+#     # ============================================================
+
+#     def set_socket_client(
+#         self,
+#         socket_client,
+#     ):
+#         """
+#         Allows the socket client to be attached after the
+#         AnomalyManager has already been constructed.
+
+#         This keeps existing construction code backward compatible.
+
+#         Example:
+
+#             anomaly_manager.set_socket_client(
+#                 proctor_socket
+#             )
+#         """
+
+#         self.socket_client = socket_client
+
+#         if socket_client is None:
+#             print("[ANOMALY] Socket client detached.")
+#         else:
+#             print("[ANOMALY] Socket client attached.")
+
+#     def _notify_socket(
+#         self,
+#         anomaly_result,
+#     ):
+#         """
+#         Sends a confirmed/captured anomaly through the optional
+#         ProctorSocketClient.
+
+#         Failures here NEVER interrupt evidence capture or the exam.
+#         Socket notification is intentionally non-fatal.
+#         """
+
+#         if self.socket_client is None:
+#             return False
+
+#         if not isinstance(
+#             anomaly_result,
+#             dict,
+#         ):
+#             return False
+
+#         if not anomaly_result.get("captured"):
+#             return False
+
+#         api_violation = anomaly_result.get("api_violation")
+
+#         if not isinstance(
+#             api_violation,
+#             dict,
+#         ):
+#             return False
+
+#         try:
+#             notify_anomaly_result = getattr(
+#                 self.socket_client,
+#                 "notify_anomaly_result",
+#                 None,
+#             )
+
+#             if callable(notify_anomaly_result):
+#                 sent = notify_anomaly_result(anomaly_result)
+
+#                 if sent:
+#                     print(
+#                         "[ANOMALY] Socket notification sent "
+#                         f"for {anomaly_result.get('event_type')}."
+#                     )
+#                 else:
+#                     print(
+#                         "[ANOMALY] Socket notification was not sent "
+#                         f"for {anomaly_result.get('event_type')}."
+#                     )
+
+#                 return bool(sent)
+
+#             # ----------------------------------------------------
+#             # FALLBACK
+#             # ----------------------------------------------------
+#             #
+#             # This allows compatibility with a socket client that
+#             # implements notify_proctor_violation() but not the
+#             # newer notify_anomaly_result() convenience method.
+#             # ----------------------------------------------------
+
+#             notify_proctor_violation = getattr(
+#                 self.socket_client,
+#                 "notify_proctor_violation",
+#                 None,
+#             )
+
+#             if callable(notify_proctor_violation):
+#                 sent = notify_proctor_violation(api_violation)
+
+#                 if sent:
+#                     print(
+#                         "[ANOMALY] Socket violation notification sent "
+#                         f"for {anomaly_result.get('event_type')}."
+#                     )
+#                 else:
+#                     print(
+#                         "[ANOMALY] Socket violation notification "
+#                         f"was not sent for "
+#                         f"{anomaly_result.get('event_type')}."
+#                     )
+
+#                 return bool(sent)
+
+#             print(
+#                 "[ANOMALY] Socket client does not provide "
+#                 "notify_anomaly_result() or "
+#                 "notify_proctor_violation()."
+#             )
+
+#             return False
+
+#         except Exception as error:
+#             print(
+#                 "[ANOMALY] Failed to send socket notification "
+#                 f"for {anomaly_result.get('event_type')}: "
+#                 f"{error}"
+#             )
+
+#             return False
+
+#     def notify_recorded_result(
+#         self,
+#         anomaly_result,
+#     ):
+#         """
+#         Public helper for cases where socket notification should
+#         happen AFTER some external code has successfully uploaded
+#         the violation to the backend API.
+
+#         Example:
+
+#             result = anomaly_manager.update(...)
+
+#             if result.get("api_violation"):
+#                 success = backend.send_violation(
+#                     result["api_violation"]
+#                 )
+
+#                 if success:
+#                     anomaly_manager.notify_recorded_result(
+#                         result
+#                     )
+
+#         This method is useful if the caller wants API-success-first
+#         ordering.
+#         """
+
+#         return self._notify_socket(anomaly_result)
+
+#     # ============================================================
+#     # RULE HELPERS
+#     # ============================================================
+
+#     def _get_rule(
+#         self,
+#         event_type,
+#     ):
 #         return self.rules.get(
 #             event_type,
 #             self.DEFAULT_RULE,
 #         )
 
-#     def _get_state(self, event_type):
+#     def _get_state(
+#         self,
+#         event_type,
+#     ):
 #         if event_type not in self.states:
 #             self.states[event_type] = {
 #                 "started_at": None,
@@ -139,6 +340,10 @@
 #         state["last_active_at"] = None
 #         state["confirmed"] = False
 
+#     # ============================================================
+#     # COOLDOWN / DURATION
+#     # ============================================================
+
 #     def get_cooldown(
 #         self,
 #         event_type,
@@ -154,6 +359,7 @@
 #                     12.0,
 #                 )
 #             )
+
 #         except (
 #             TypeError,
 #             ValueError,
@@ -180,6 +386,7 @@
 #                     0.0,
 #                 )
 #             )
+
 #         except (
 #             TypeError,
 #             ValueError,
@@ -208,6 +415,10 @@
 #             0.0,
 #             cooldown - elapsed,
 #         )
+
+#     # ============================================================
+#     # API VIOLATION BUILDER
+#     # ============================================================
 
 #     def _build_api_violation(
 #         self,
@@ -250,6 +461,10 @@
 #             "file_path": file_path,
 #         }
 
+#     # ============================================================
+#     # UPDATE SINGLE ANOMALY
+#     # ============================================================
+
 #     def update(
 #         self,
 #         event_type,
@@ -287,6 +502,7 @@
 #                     0.0,
 #                 )
 #             )
+
 #         except (
 #             TypeError,
 #             ValueError,
@@ -302,11 +518,19 @@
 
 #         now = time.monotonic()
 
+#         # --------------------------------------------------------
+#         # ACTIVE ANOMALY
+#         # --------------------------------------------------------
+
 #         if active:
 #             state["last_active_at"] = now
 
 #             if state["started_at"] is None:
 #                 state["started_at"] = now
+
+#         # --------------------------------------------------------
+#         # INACTIVE / RECOVERY
+#         # --------------------------------------------------------
 
 #         else:
 #             if state["started_at"] is None:
@@ -330,7 +554,7 @@
 
 #             last_active_at = state.get("last_active_at")
 
-#             if last_active_at is not None and (now - last_active_at < recovery_grace):
+#             if last_active_at is not None and (now - last_active_at) < recovery_grace:
 #                 active = True
 
 #             else:
@@ -357,15 +581,24 @@
 #                     "api_violation": None,
 #                 }
 
+#         # --------------------------------------------------------
+#         # CURRENT DURATION
+#         # --------------------------------------------------------
+
 #         started_at = state.get("started_at")
 
 #         if started_at is None:
 #             duration = 0.0
+
 #         else:
 #             duration = max(
 #                 0.0,
 #                 now - started_at,
 #             )
+
+#         # --------------------------------------------------------
+#         # WAIT UNTIL REQUIRED DURATION
+#         # --------------------------------------------------------
 
 #         if duration < required_duration:
 #             return {
@@ -387,10 +620,18 @@
 #                 "api_violation": None,
 #             }
 
+#         # --------------------------------------------------------
+#         # CONFIRMED
+#         # --------------------------------------------------------
+
 #         if not state["confirmed"]:
 #             state["confirmed"] = True
 
 #             print(f"[ANOMALY] DETECTED " f"{event_type} " f"| duration={duration:.2f}s")
+
+#         # --------------------------------------------------------
+#         # COOLDOWN
+#         # --------------------------------------------------------
 
 #         cooldown_remaining = self._get_cooldown_remaining(
 #             state,
@@ -411,6 +652,10 @@
 #                 "evidence": None,
 #                 "api_violation": None,
 #             }
+
+#         # --------------------------------------------------------
+#         # EVIDENCE METADATA
+#         # --------------------------------------------------------
 
 #         event_metadata = dict(metadata or {})
 
@@ -433,6 +678,10 @@
 #             recovery_grace,
 #             2,
 #         )
+
+#         # --------------------------------------------------------
+#         # EVIDENCE CAPTURE
+#         # --------------------------------------------------------
 
 #         try:
 #             evidence = self.evidence_store.capture(
@@ -460,6 +709,10 @@
 #                 "error": str(error),
 #             }
 
+#         # --------------------------------------------------------
+#         # EVIDENCE CAPTURED
+#         # --------------------------------------------------------
+
 #         if evidence is not None:
 #             state["last_capture_at"] = now
 
@@ -471,7 +724,7 @@
 
 #             print(f"[ANOMALY] EVIDENCE CAPTURED " f"{event_type}")
 
-#             return {
+#             result = {
 #                 "event_type": event_type,
 #                 "active": True,
 #                 "confirmed": True,
@@ -483,6 +736,29 @@
 #                 "evidence": evidence,
 #                 "api_violation": api_violation,
 #             }
+
+#             # ----------------------------------------------------
+#             # SOCKET NOTIFICATION
+#             # ----------------------------------------------------
+#             #
+#             # If a socket client was supplied, this sends the
+#             # violation to Node.
+#             #
+#             # If no socket client exists, absolutely nothing changes
+#             # compared with the old AnomalyManager.
+#             #
+#             # Any Socket.IO failure is intentionally isolated from
+#             # anomaly/evidence processing.
+#             # ----------------------------------------------------
+
+#             if self.socket_client is not None:
+#                 self._notify_socket(result)
+
+#             return result
+
+#         # --------------------------------------------------------
+#         # NO EVIDENCE
+#         # --------------------------------------------------------
 
 #         return {
 #             "event_type": event_type,
@@ -496,6 +772,10 @@
 #             "evidence": None,
 #             "api_violation": None,
 #         }
+
+#     # ============================================================
+#     # COOLDOWN REMAINING
+#     # ============================================================
 
 #     def get_cooldown_remaining(
 #         self,
@@ -517,6 +797,10 @@
 #             now,
 #             cooldown,
 #         )
+
+#     # ============================================================
+#     # UPDATE MULTIPLE ANOMALIES
+#     # ============================================================
 
 #     def update_many(
 #         self,
@@ -548,6 +832,7 @@
 #                 dict,
 #             ):
 #                 event_metadata.update(possible_event_metadata)
+
 #             else:
 #                 event_metadata.update(shared_metadata)
 
@@ -561,6 +846,10 @@
 #             )
 
 #         return results
+
+#     # ============================================================
+#     # RESET SINGLE EVENT
+#     # ============================================================
 
 #     def reset_event(
 #         self,
@@ -578,6 +867,10 @@
 #             state,
 #         )
 
+#     # ============================================================
+#     # RESET ALL
+#     # ============================================================
+
 #     def reset_all(
 #         self,
 #     ):
@@ -593,6 +886,10 @@
 #         self.states.clear()
 
 #         print("[ANOMALY] All anomaly states reset.")
+
+#     # ============================================================
+#     # STATE HELPERS
+#     # ============================================================
 
 #     def get_state(
 #         self,
@@ -615,7 +912,17 @@
 #     def get_all_states(
 #         self,
 #     ):
-#         return {event_type: dict(state) for (event_type, state) in self.states.items()}
+#         return {
+#             event_type: dict(state)
+#             for (
+#                 event_type,
+#                 state,
+#             ) in self.states.items()
+#         }
+
+#     # ============================================================
+#     # CLOSE
+#     # ============================================================
 
 #     def close(
 #         self,
@@ -635,6 +942,11 @@ class AnomalyManager:
         "duration": 0.0,
         "cooldown": 12.0,
         "recovery_grace": 0.0,
+        "capture_once_per_incident": False,
+    }
+
+    AUDIO_EVENT_TYPES = {
+        "VOICE_DETECTED",
     }
 
     def __init__(
@@ -646,117 +958,121 @@ class AnomalyManager:
             raise ValueError("AnomalyManager requires an evidence_store.")
 
         self.evidence_store = evidence_store
-
-        # --------------------------------------------------------
-        # OPTIONAL SOCKET CLIENT
-        # --------------------------------------------------------
-        #
-        # Fully backward compatible:
-        #
-        # Existing:
-        #
-        #   AnomalyManager(evidence_store)
-        #
-        # still works exactly as before.
-        #
-        # New:
-        #
-        #   AnomalyManager(
-        #       evidence_store,
-        #       socket_client=proctor_socket,
-        #   )
-        #
-        # When supplied, confirmed anomalies that actually produce
-        # evidence/api_violation can also be emitted over Socket.IO.
-        # --------------------------------------------------------
-
         self.socket_client = socket_client
 
         self.rules = {
             "NO_FACE": {
-                "duration": 0.0,
+                "duration": 2.0,
                 "cooldown": settings.EVIDENCE_COOLDOWN_NO_FACE,
-                "recovery_grace": 0.0,
+                "recovery_grace": 0.5,
+                "capture_once_per_incident": True,
             },
             "MULTIPLE_FACES": {
                 "duration": 0.0,
                 "cooldown": settings.EVIDENCE_COOLDOWN_MULTIPLE_FACES,
                 "recovery_grace": 0.5,
+                "capture_once_per_incident": False,
             },
             "GAZE_AWAY": {
                 "duration": 3.0,
                 "cooldown": settings.EVIDENCE_COOLDOWN_GAZE_AWAY,
                 "recovery_grace": 0.8,
+                "capture_once_per_incident": False,
             },
             "HEAD_AWAY": {
                 "duration": 1.0,
                 "cooldown": settings.EVIDENCE_COOLDOWN_HEAD_AWAY,
                 "recovery_grace": 0.8,
+                "capture_once_per_incident": False,
             },
             "PHONE_DETECTED": {
-                "duration": 1.0,
+                "duration": 0.3,
                 "cooldown": settings.EVIDENCE_COOLDOWN_PHONE_DETECTED,
                 "recovery_grace": 1.0,
+                "capture_once_per_incident": False,
             },
             "BOOK_DETECTED": {
                 "duration": 1.0,
                 "cooldown": settings.EVIDENCE_COOLDOWN_BOOK_DETECTED,
                 "recovery_grace": 1.0,
+                "capture_once_per_incident": False,
             },
             "EXTRA_PERSON": {
                 "duration": 1.0,
                 "cooldown": settings.EVIDENCE_COOLDOWN_EXTRA_PERSON,
                 "recovery_grace": 1.0,
+                "capture_once_per_incident": False,
             },
             "BODY_LEAN_LEFT": {
                 "duration": 2.0,
                 "cooldown": settings.EVIDENCE_COOLDOWN_BODY_LEAN_LEFT,
                 "recovery_grace": 0.8,
+                "capture_once_per_incident": False,
             },
             "BODY_LEAN_RIGHT": {
                 "duration": 2.0,
                 "cooldown": settings.EVIDENCE_COOLDOWN_BODY_LEAN_RIGHT,
                 "recovery_grace": 0.8,
+                "capture_once_per_incident": False,
             },
             "LEFT_ARM_RAISED": {
                 "duration": 2.0,
                 "cooldown": settings.EVIDENCE_COOLDOWN_LEFT_ARM_RAISED,
                 "recovery_grace": 0.8,
+                "capture_once_per_incident": False,
             },
             "RIGHT_ARM_RAISED": {
                 "duration": 2.0,
                 "cooldown": settings.EVIDENCE_COOLDOWN_RIGHT_ARM_RAISED,
                 "recovery_grace": 0.8,
+                "capture_once_per_incident": False,
             },
             "UNUSUAL_ARM_MOVEMENT": {
                 "duration": 1.5,
                 "cooldown": settings.EVIDENCE_COOLDOWN_UNUSUAL_ARM_MOVEMENT,
                 "recovery_grace": 1.0,
+                "capture_once_per_incident": False,
             },
             "UPPER_BODY_NOT_VISIBLE": {
                 "duration": 2.0,
                 "cooldown": settings.EVIDENCE_COOLDOWN_UPPER_BODY_NOT_VISIBLE,
                 "recovery_grace": 0.8,
+                "capture_once_per_incident": False,
             },
             "CAMERA_OFF": {
                 "duration": 0.0,
                 "cooldown": settings.EVIDENCE_COOLDOWN_CAMERA_OFF,
                 "recovery_grace": 0.0,
+                "capture_once_per_incident": False,
             },
             "MIC_OFF": {
                 "duration": 0.0,
                 "cooldown": settings.EVIDENCE_COOLDOWN_MIC_OFF,
                 "recovery_grace": 0.0,
+                "capture_once_per_incident": False,
             },
             "CAMERA_ERROR": {
                 "duration": 0.0,
                 "cooldown": settings.EVIDENCE_COOLDOWN_CAMERA_ERROR,
                 "recovery_grace": 0.0,
+                "capture_once_per_incident": False,
             },
             "MIC_ERROR": {
                 "duration": 0.0,
                 "cooldown": settings.EVIDENCE_COOLDOWN_MIC_ERROR,
                 "recovery_grace": 0.0,
+                "capture_once_per_incident": False,
+            },
+            "VOICE_DETECTED": {
+                "duration": 0.0,
+                "cooldown": getattr(
+                    settings,
+                    "EVIDENCE_COOLDOWN_VOICE_DETECTED",
+                    12.0,
+                ),
+                "recovery_grace": 0.75,
+                "capture_once_per_incident": True,
+                "minimum_audio_duration": 2.0,
             },
         }
 
@@ -764,48 +1080,26 @@ class AnomalyManager:
 
         print("[ANOMALY] Manager initialized.")
 
-        print(f"[ANOMALY] {len(self.rules)} anomaly rules loaded.")
-
-    # ============================================================
-    # SOCKET CLIENT
-    # ============================================================
+        print(f"[ANOMALY] " f"{len(self.rules)} anomaly rules loaded.")
 
     def set_socket_client(
         self,
         socket_client,
     ):
-        """
-        Allows the socket client to be attached after the
-        AnomalyManager has already been constructed.
-
-        This keeps existing construction code backward compatible.
-
-        Example:
-
-            anomaly_manager.set_socket_client(
-                proctor_socket
-            )
-        """
-
         self.socket_client = socket_client
 
         if socket_client is None:
+
             print("[ANOMALY] Socket client detached.")
+
         else:
+
             print("[ANOMALY] Socket client attached.")
 
     def _notify_socket(
         self,
         anomaly_result,
     ):
-        """
-        Sends a confirmed/captured anomaly through the optional
-        ProctorSocketClient.
-
-        Failures here NEVER interrupt evidence capture or the exam.
-        Socket notification is intentionally non-fatal.
-        """
-
         if self.socket_client is None:
             return False
 
@@ -827,6 +1121,7 @@ class AnomalyManager:
             return False
 
         try:
+
             notify_anomaly_result = getattr(
                 self.socket_client,
                 "notify_anomaly_result",
@@ -834,29 +1129,26 @@ class AnomalyManager:
             )
 
             if callable(notify_anomaly_result):
+
                 sent = notify_anomaly_result(anomaly_result)
 
                 if sent:
+
                     print(
                         "[ANOMALY] Socket notification sent "
-                        f"for {anomaly_result.get('event_type')}."
+                        f"for "
+                        f"{anomaly_result.get('event_type')}."
                     )
+
                 else:
+
                     print(
                         "[ANOMALY] Socket notification was not sent "
-                        f"for {anomaly_result.get('event_type')}."
+                        f"for "
+                        f"{anomaly_result.get('event_type')}."
                     )
 
                 return bool(sent)
-
-            # ----------------------------------------------------
-            # FALLBACK
-            # ----------------------------------------------------
-            #
-            # This allows compatibility with a socket client that
-            # implements notify_proctor_violation() but not the
-            # newer notify_anomaly_result() convenience method.
-            # ----------------------------------------------------
 
             notify_proctor_violation = getattr(
                 self.socket_client,
@@ -865,14 +1157,19 @@ class AnomalyManager:
             )
 
             if callable(notify_proctor_violation):
+
                 sent = notify_proctor_violation(api_violation)
 
                 if sent:
+
                     print(
                         "[ANOMALY] Socket violation notification sent "
-                        f"for {anomaly_result.get('event_type')}."
+                        f"for "
+                        f"{anomaly_result.get('event_type')}."
                     )
+
                 else:
+
                     print(
                         "[ANOMALY] Socket violation notification "
                         f"was not sent for "
@@ -890,9 +1187,11 @@ class AnomalyManager:
             return False
 
         except Exception as error:
+
             print(
                 "[ANOMALY] Failed to send socket notification "
-                f"for {anomaly_result.get('event_type')}: "
+                f"for "
+                f"{anomaly_result.get('event_type')}: "
                 f"{error}"
             )
 
@@ -902,34 +1201,7 @@ class AnomalyManager:
         self,
         anomaly_result,
     ):
-        """
-        Public helper for cases where socket notification should
-        happen AFTER some external code has successfully uploaded
-        the violation to the backend API.
-
-        Example:
-
-            result = anomaly_manager.update(...)
-
-            if result.get("api_violation"):
-                success = backend.send_violation(
-                    result["api_violation"]
-                )
-
-                if success:
-                    anomaly_manager.notify_recorded_result(
-                        result
-                    )
-
-        This method is useful if the caller wants API-success-first
-        ordering.
-        """
-
         return self._notify_socket(anomaly_result)
-
-    # ============================================================
-    # RULE HELPERS
-    # ============================================================
 
     def _get_rule(
         self,
@@ -945,14 +1217,22 @@ class AnomalyManager:
         event_type,
     ):
         if event_type not in self.states:
+
             self.states[event_type] = {
                 "started_at": None,
                 "last_active_at": None,
                 "last_capture_at": None,
                 "confirmed": False,
+                "captured_in_incident": False,
             }
 
-        return self.states[event_type]
+        state = self.states[event_type]
+
+        if "captured_in_incident" not in state:
+
+            state["captured_in_incident"] = False
+
+        return state
 
     def _reset_state(
         self,
@@ -960,15 +1240,16 @@ class AnomalyManager:
         state,
     ):
         if state.get("confirmed"):
-            print(f"[ANOMALY] RECOVERED {event_type}")
+
+            print(f"[ANOMALY] RECOVERED " f"{event_type}")
 
         state["started_at"] = None
+
         state["last_active_at"] = None
+
         state["confirmed"] = False
 
-    # ============================================================
-    # COOLDOWN / DURATION
-    # ============================================================
+        state["captured_in_incident"] = False
 
     def get_cooldown(
         self,
@@ -979,6 +1260,7 @@ class AnomalyManager:
         rule = self._get_rule(event_type)
 
         try:
+
             cooldown = float(
                 rule.get(
                     "cooldown",
@@ -990,6 +1272,7 @@ class AnomalyManager:
             TypeError,
             ValueError,
         ):
+
             cooldown = 12.0
 
         return max(
@@ -1006,6 +1289,7 @@ class AnomalyManager:
         rule = self._get_rule(event_type)
 
         try:
+
             duration = float(
                 rule.get(
                     "duration",
@@ -1017,11 +1301,81 @@ class AnomalyManager:
             TypeError,
             ValueError,
         ):
+
             duration = 0.0
 
         return max(
             0.0,
             duration,
+        )
+
+    def get_minimum_audio_duration(
+        self,
+        event_type,
+    ):
+        event_type = str(event_type).upper().strip()
+
+        rule = self._get_rule(event_type)
+
+        try:
+
+            duration = float(
+                rule.get(
+                    "minimum_audio_duration",
+                    0.0,
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+
+            duration = 0.0
+
+        return max(
+            0.0,
+            duration,
+        )
+
+    def _get_recovery_grace(
+        self,
+        event_type,
+    ):
+        rule = self._get_rule(event_type)
+
+        try:
+
+            recovery_grace = float(
+                rule.get(
+                    "recovery_grace",
+                    0.0,
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+
+            recovery_grace = 0.0
+
+        return max(
+            0.0,
+            recovery_grace,
+        )
+
+    def _capture_once_per_incident(
+        self,
+        event_type,
+    ):
+        rule = self._get_rule(event_type)
+
+        return bool(
+            rule.get(
+                "capture_once_per_incident",
+                False,
+            )
         )
 
     def _get_cooldown_remaining(
@@ -1042,10 +1396,6 @@ class AnomalyManager:
             cooldown - elapsed,
         )
 
-    # ============================================================
-    # API VIOLATION BUILDER
-    # ============================================================
-
     def _build_api_violation(
         self,
         event_type,
@@ -1058,7 +1408,12 @@ class AnomalyManager:
         file_path = evidence.get("file_path")
 
         if not file_path:
+
             file_path = evidence.get("image_path")
+
+        if not file_path:
+
+            file_path = evidence.get("audio_path")
 
         metadata_path = evidence.get("metadata_path")
 
@@ -1070,15 +1425,24 @@ class AnomalyManager:
             event_payload,
             dict,
         ):
+
             client_captured_at = event_payload.get("captured_at")
 
         if not client_captured_at:
+
             client_captured_at = evidence.get("client_captured_at")
 
         violation_metadata = dict(event_metadata or {})
 
         if metadata_path:
+
             violation_metadata["evidence_metadata_path"] = metadata_path
+
+        evidence_type = evidence.get("evidence_type")
+
+        if evidence_type:
+
+            violation_metadata["evidence_type"] = evidence_type
 
         return {
             "violation_type": event_type,
@@ -1087,9 +1451,94 @@ class AnomalyManager:
             "file_path": file_path,
         }
 
-    # ============================================================
-    # UPDATE SINGLE ANOMALY
-    # ============================================================
+    def _empty_result(
+        self,
+        event_type,
+        active,
+        confirmed,
+        duration,
+        required_duration,
+        cooldown,
+        cooldown_remaining,
+    ):
+        return {
+            "event_type": event_type,
+            "active": bool(active),
+            "confirmed": bool(confirmed),
+            "captured": False,
+            "duration": duration,
+            "required_duration": required_duration,
+            "cooldown": cooldown,
+            "cooldown_remaining": cooldown_remaining,
+            "evidence": None,
+            "api_violation": None,
+        }
+
+    def _capture_image_evidence(
+        self,
+        event_type,
+        frame,
+        event_metadata,
+    ):
+        return self.evidence_store.capture(
+            frame=frame,
+            event_type=event_type,
+            metadata=event_metadata,
+        )
+
+    def _capture_audio_evidence(
+        self,
+        event_type,
+        audio_evidence,
+        event_metadata,
+    ):
+        capture_audio = getattr(
+            self.evidence_store,
+            "capture_audio",
+            None,
+        )
+
+        if not callable(capture_audio):
+
+            raise RuntimeError("EvidenceStore does not provide capture_audio().")
+
+        if not isinstance(
+            audio_evidence,
+            dict,
+        ):
+
+            raise ValueError("Audio evidence must be a dictionary.")
+
+        pcm = audio_evidence.get("pcm")
+
+        sample_rate = audio_evidence.get("sample_rate")
+
+        channels = audio_evidence.get(
+            "channels",
+            1,
+        )
+
+        sample_width = audio_evidence.get(
+            "sample_width",
+            2,
+        )
+
+        if not pcm:
+
+            raise ValueError("Audio evidence contains no PCM data.")
+
+        if not sample_rate:
+
+            raise ValueError("Audio evidence sample rate is missing.")
+
+        return capture_audio(
+            pcm=pcm,
+            sample_rate=int(sample_rate),
+            channels=int(channels),
+            sample_width=int(sample_width),
+            event_type=event_type,
+            metadata=event_metadata,
+        )
 
     def update(
         self,
@@ -1101,12 +1550,14 @@ class AnomalyManager:
         event_type = str(event_type).upper().strip()
 
         if not event_type:
+
             return {
                 "event_type": "",
                 "active": False,
                 "confirmed": False,
                 "captured": False,
                 "duration": 0.0,
+                "required_duration": 0.0,
                 "cooldown": 0.0,
                 "cooldown_remaining": 0.0,
                 "evidence": None,
@@ -1115,149 +1566,129 @@ class AnomalyManager:
 
         active = bool(active)
 
-        rule = self._get_rule(event_type)
-
         required_duration = self.get_required_duration(event_type)
 
         cooldown = self.get_cooldown(event_type)
 
-        try:
-            recovery_grace = float(
-                rule.get(
-                    "recovery_grace",
-                    0.0,
-                )
-            )
+        recovery_grace = self._get_recovery_grace(event_type)
 
-        except (
-            TypeError,
-            ValueError,
-        ):
-            recovery_grace = 0.0
-
-        recovery_grace = max(
-            0.0,
-            recovery_grace,
-        )
+        capture_once = self._capture_once_per_incident(event_type)
 
         state = self._get_state(event_type)
 
         now = time.monotonic()
 
-        # --------------------------------------------------------
-        # ACTIVE ANOMALY
-        # --------------------------------------------------------
-
         if active:
+
             state["last_active_at"] = now
 
             if state["started_at"] is None:
+
                 state["started_at"] = now
 
-        # --------------------------------------------------------
-        # INACTIVE / RECOVERY
-        # --------------------------------------------------------
-
         else:
+
             if state["started_at"] is None:
-                return {
-                    "event_type": event_type,
-                    "active": False,
-                    "confirmed": False,
-                    "captured": False,
-                    "duration": 0.0,
-                    "cooldown": cooldown,
-                    "cooldown_remaining": (
-                        self._get_cooldown_remaining(
-                            state,
-                            now,
-                            cooldown,
-                        )
+
+                return self._empty_result(
+                    event_type=event_type,
+                    active=False,
+                    confirmed=False,
+                    duration=0.0,
+                    required_duration=required_duration,
+                    cooldown=cooldown,
+                    cooldown_remaining=self._get_cooldown_remaining(
+                        state,
+                        now,
+                        cooldown,
                     ),
-                    "evidence": None,
-                    "api_violation": None,
-                }
+                )
 
             last_active_at = state.get("last_active_at")
 
             if last_active_at is not None and (now - last_active_at) < recovery_grace:
+
                 active = True
 
             else:
+
                 self._reset_state(
                     event_type,
                     state,
                 )
 
-                return {
-                    "event_type": event_type,
-                    "active": False,
-                    "confirmed": False,
-                    "captured": False,
-                    "duration": 0.0,
-                    "cooldown": cooldown,
-                    "cooldown_remaining": (
-                        self._get_cooldown_remaining(
-                            state,
-                            now,
-                            cooldown,
-                        )
+                return self._empty_result(
+                    event_type=event_type,
+                    active=False,
+                    confirmed=False,
+                    duration=0.0,
+                    required_duration=required_duration,
+                    cooldown=cooldown,
+                    cooldown_remaining=self._get_cooldown_remaining(
+                        state,
+                        now,
+                        cooldown,
                     ),
-                    "evidence": None,
-                    "api_violation": None,
-                }
-
-        # --------------------------------------------------------
-        # CURRENT DURATION
-        # --------------------------------------------------------
+                )
 
         started_at = state.get("started_at")
 
         if started_at is None:
+
             duration = 0.0
 
         else:
+
             duration = max(
                 0.0,
                 now - started_at,
             )
 
-        # --------------------------------------------------------
-        # WAIT UNTIL REQUIRED DURATION
-        # --------------------------------------------------------
-
         if duration < required_duration:
-            return {
-                "event_type": event_type,
-                "active": True,
-                "confirmed": False,
-                "captured": False,
-                "duration": duration,
-                "required_duration": required_duration,
-                "cooldown": cooldown,
-                "cooldown_remaining": (
-                    self._get_cooldown_remaining(
-                        state,
-                        now,
-                        cooldown,
-                    )
-                ),
-                "evidence": None,
-                "api_violation": None,
-            }
 
-        # --------------------------------------------------------
-        # CONFIRMED
-        # --------------------------------------------------------
+            return self._empty_result(
+                event_type=event_type,
+                active=True,
+                confirmed=False,
+                duration=duration,
+                required_duration=required_duration,
+                cooldown=cooldown,
+                cooldown_remaining=self._get_cooldown_remaining(
+                    state,
+                    now,
+                    cooldown,
+                ),
+            )
 
         if not state["confirmed"]:
+
             state["confirmed"] = True
 
-            print(f"[ANOMALY] DETECTED " f"{event_type} " f"| duration={duration:.2f}s")
+            print(
+                f"[ANOMALY] DETECTED "
+                f"{event_type} "
+                f"| duration="
+                f"{duration:.2f}s"
+            )
 
-        # --------------------------------------------------------
-        # COOLDOWN
-        # --------------------------------------------------------
+        if capture_once and state.get(
+            "captured_in_incident",
+            False,
+        ):
+
+            return self._empty_result(
+                event_type=event_type,
+                active=True,
+                confirmed=True,
+                duration=duration,
+                required_duration=required_duration,
+                cooldown=cooldown,
+                cooldown_remaining=self._get_cooldown_remaining(
+                    state,
+                    now,
+                    cooldown,
+                ),
+            )
 
         cooldown_remaining = self._get_cooldown_remaining(
             state,
@@ -1266,22 +1697,16 @@ class AnomalyManager:
         )
 
         if cooldown_remaining > 0.0:
-            return {
-                "event_type": event_type,
-                "active": True,
-                "confirmed": True,
-                "captured": False,
-                "duration": duration,
-                "required_duration": required_duration,
-                "cooldown": cooldown,
-                "cooldown_remaining": cooldown_remaining,
-                "evidence": None,
-                "api_violation": None,
-            }
 
-        # --------------------------------------------------------
-        # EVIDENCE METADATA
-        # --------------------------------------------------------
+            return self._empty_result(
+                event_type=event_type,
+                active=True,
+                confirmed=True,
+                duration=duration,
+                required_duration=required_duration,
+                cooldown=cooldown,
+                cooldown_remaining=cooldown_remaining,
+            )
 
         event_metadata = dict(metadata or {})
 
@@ -1305,42 +1730,46 @@ class AnomalyManager:
             2,
         )
 
-        # --------------------------------------------------------
-        # EVIDENCE CAPTURE
-        # --------------------------------------------------------
+        event_metadata["evidence_type"] = "image"
 
         try:
-            evidence = self.evidence_store.capture(
-                frame=frame,
+
+            evidence = self._capture_image_evidence(
                 event_type=event_type,
-                metadata=event_metadata,
+                frame=frame,
+                event_metadata=event_metadata,
             )
 
         except Exception as error:
+
             print(
-                f"[ANOMALY] Evidence capture " f"failed for {event_type}: " f"{error}"
+                f"[ANOMALY] Evidence capture "
+                f"failed for "
+                f"{event_type}: "
+                f"{error}"
             )
 
-            return {
-                "event_type": event_type,
-                "active": True,
-                "confirmed": True,
-                "captured": False,
-                "duration": duration,
-                "required_duration": required_duration,
-                "cooldown": cooldown,
-                "cooldown_remaining": cooldown,
-                "evidence": None,
-                "api_violation": None,
-                "error": str(error),
-            }
+            result = self._empty_result(
+                event_type=event_type,
+                active=True,
+                confirmed=True,
+                duration=duration,
+                required_duration=required_duration,
+                cooldown=cooldown,
+                cooldown_remaining=cooldown,
+            )
 
-        # --------------------------------------------------------
-        # EVIDENCE CAPTURED
-        # --------------------------------------------------------
+            result["error"] = str(error)
+
+            return result
 
         if evidence is not None:
+
             state["last_capture_at"] = now
+
+            if capture_once:
+
+                state["captured_in_incident"] = True
 
             api_violation = self._build_api_violation(
                 event_type=event_type,
@@ -1363,45 +1792,301 @@ class AnomalyManager:
                 "api_violation": api_violation,
             }
 
-            # ----------------------------------------------------
-            # SOCKET NOTIFICATION
-            # ----------------------------------------------------
-            #
-            # If a socket client was supplied, this sends the
-            # violation to Node.
-            #
-            # If no socket client exists, absolutely nothing changes
-            # compared with the old AnomalyManager.
-            #
-            # Any Socket.IO failure is intentionally isolated from
-            # anomaly/evidence processing.
-            # ----------------------------------------------------
-
             if self.socket_client is not None:
+
                 self._notify_socket(result)
 
             return result
 
-        # --------------------------------------------------------
-        # NO EVIDENCE
-        # --------------------------------------------------------
+        return self._empty_result(
+            event_type=event_type,
+            active=True,
+            confirmed=True,
+            duration=duration,
+            required_duration=required_duration,
+            cooldown=cooldown,
+            cooldown_remaining=cooldown,
+        )
 
-        return {
+    def update_audio(
+        self,
+        event_type,
+        active,
+        audio_evidence=None,
+        metadata=None,
+    ):
+        event_type = str(event_type).upper().strip()
+
+        if not event_type:
+
+            return {
+                "event_type": "",
+                "active": False,
+                "confirmed": False,
+                "captured": False,
+                "duration": 0.0,
+                "required_duration": 0.0,
+                "cooldown": 0.0,
+                "cooldown_remaining": 0.0,
+                "evidence": None,
+                "api_violation": None,
+            }
+
+        active = bool(active)
+
+        state = self._get_state(event_type)
+
+        cooldown = self.get_cooldown(event_type)
+
+        minimum_audio_duration = self.get_minimum_audio_duration(event_type)
+
+        capture_once = self._capture_once_per_incident(event_type)
+
+        now = time.monotonic()
+
+        if not active:
+
+            self._reset_state(
+                event_type,
+                state,
+            )
+
+            return self._empty_result(
+                event_type=event_type,
+                active=False,
+                confirmed=False,
+                duration=0.0,
+                required_duration=minimum_audio_duration,
+                cooldown=cooldown,
+                cooldown_remaining=self._get_cooldown_remaining(
+                    state,
+                    now,
+                    cooldown,
+                ),
+            )
+
+        state["last_active_at"] = now
+
+        if state["started_at"] is None:
+
+            state["started_at"] = now
+
+        if not isinstance(
+            audio_evidence,
+            dict,
+        ):
+
+            result = self._empty_result(
+                event_type=event_type,
+                active=True,
+                confirmed=False,
+                duration=0.0,
+                required_duration=minimum_audio_duration,
+                cooldown=cooldown,
+                cooldown_remaining=self._get_cooldown_remaining(
+                    state,
+                    now,
+                    cooldown,
+                ),
+            )
+
+            result["error"] = "Audio evidence is missing."
+
+            return result
+
+        event_metadata = dict(metadata or {})
+
+        detected_duration = event_metadata.get("voice_duration_seconds")
+
+        if detected_duration is None:
+
+            detected_duration = audio_evidence.get("voice_duration_seconds")
+
+        if detected_duration is None:
+
+            detected_duration = audio_evidence.get("duration_seconds")
+
+        try:
+
+            detected_duration = float(detected_duration or 0.0)
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+
+            detected_duration = 0.0
+
+        if detected_duration < minimum_audio_duration:
+
+            return self._empty_result(
+                event_type=event_type,
+                active=True,
+                confirmed=False,
+                duration=detected_duration,
+                required_duration=minimum_audio_duration,
+                cooldown=cooldown,
+                cooldown_remaining=self._get_cooldown_remaining(
+                    state,
+                    now,
+                    cooldown,
+                ),
+            )
+
+        state["confirmed"] = True
+
+        if capture_once and state.get(
+            "captured_in_incident",
+            False,
+        ):
+
+            return self._empty_result(
+                event_type=event_type,
+                active=True,
+                confirmed=True,
+                duration=detected_duration,
+                required_duration=minimum_audio_duration,
+                cooldown=cooldown,
+                cooldown_remaining=self._get_cooldown_remaining(
+                    state,
+                    now,
+                    cooldown,
+                ),
+            )
+
+        cooldown_remaining = self._get_cooldown_remaining(
+            state,
+            now,
+            cooldown,
+        )
+
+        if cooldown_remaining > 0.0:
+
+            return self._empty_result(
+                event_type=event_type,
+                active=True,
+                confirmed=True,
+                duration=detected_duration,
+                required_duration=minimum_audio_duration,
+                cooldown=cooldown,
+                cooldown_remaining=cooldown_remaining,
+            )
+
+        event_metadata["event_duration_seconds"] = round(
+            detected_duration,
+            2,
+        )
+
+        event_metadata["required_duration_seconds"] = round(
+            minimum_audio_duration,
+            2,
+        )
+
+        event_metadata["evidence_cooldown_seconds"] = round(
+            cooldown,
+            2,
+        )
+
+        event_metadata["evidence_type"] = "audio"
+
+        event_metadata["audio_sample_rate"] = audio_evidence.get("sample_rate")
+
+        event_metadata["audio_channels"] = audio_evidence.get(
+            "channels",
+            1,
+        )
+
+        event_metadata["audio_sample_width"] = audio_evidence.get(
+            "sample_width",
+            2,
+        )
+
+        event_metadata["audio_buffer_duration_seconds"] = audio_evidence.get(
+            "duration_seconds"
+        )
+
+        print(
+            f"[ANOMALY] DETECTED "
+            f"{event_type} "
+            f"| voice_duration="
+            f"{detected_duration:.2f}s"
+        )
+
+        try:
+
+            evidence = self._capture_audio_evidence(
+                event_type=event_type,
+                audio_evidence=audio_evidence,
+                event_metadata=event_metadata,
+            )
+
+        except Exception as error:
+
+            print(
+                f"[ANOMALY] Audio evidence capture "
+                f"failed for "
+                f"{event_type}: "
+                f"{error}"
+            )
+
+            result = self._empty_result(
+                event_type=event_type,
+                active=True,
+                confirmed=True,
+                duration=detected_duration,
+                required_duration=minimum_audio_duration,
+                cooldown=cooldown,
+                cooldown_remaining=0.0,
+            )
+
+            result["error"] = str(error)
+
+            return result
+
+        if evidence is None:
+
+            return self._empty_result(
+                event_type=event_type,
+                active=True,
+                confirmed=True,
+                duration=detected_duration,
+                required_duration=minimum_audio_duration,
+                cooldown=cooldown,
+                cooldown_remaining=0.0,
+            )
+
+        state["last_capture_at"] = now
+
+        if capture_once:
+
+            state["captured_in_incident"] = True
+
+        api_violation = self._build_api_violation(
+            event_type=event_type,
+            evidence=evidence,
+            event_metadata=event_metadata,
+        )
+
+        print(f"[ANOMALY] AUDIO EVIDENCE CAPTURED " f"{event_type}")
+
+        result = {
             "event_type": event_type,
             "active": True,
             "confirmed": True,
-            "captured": False,
-            "duration": duration,
-            "required_duration": required_duration,
+            "captured": True,
+            "duration": detected_duration,
+            "required_duration": minimum_audio_duration,
             "cooldown": cooldown,
-            "cooldown_remaining": cooldown,
-            "evidence": None,
-            "api_violation": None,
+            "cooldown_remaining": 0.0,
+            "evidence": evidence,
+            "api_violation": api_violation,
         }
 
-    # ============================================================
-    # COOLDOWN REMAINING
-    # ============================================================
+        if self.socket_client is not None:
+
+            self._notify_socket(result)
+
+        return result
 
     def get_cooldown_remaining(
         self,
@@ -1424,10 +2109,6 @@ class AnomalyManager:
             cooldown,
         )
 
-    # ============================================================
-    # UPDATE MULTIPLE ANOMALIES
-    # ============================================================
-
     def update_many(
         self,
         anomalies,
@@ -1442,6 +2123,7 @@ class AnomalyManager:
             anomalies,
             dict,
         ):
+
             return results
 
         for (
@@ -1457,9 +2139,11 @@ class AnomalyManager:
                 possible_event_metadata,
                 dict,
             ):
+
                 event_metadata.update(possible_event_metadata)
 
             else:
+
                 event_metadata.update(shared_metadata)
 
             normalized_event_type = str(event_type).upper().strip()
@@ -1472,10 +2156,6 @@ class AnomalyManager:
             )
 
         return results
-
-    # ============================================================
-    # RESET SINGLE EVENT
-    # ============================================================
 
     def reset_event(
         self,
@@ -1493,10 +2173,6 @@ class AnomalyManager:
             state,
         )
 
-    # ============================================================
-    # RESET ALL
-    # ============================================================
-
     def reset_all(
         self,
     ):
@@ -1504,6 +2180,7 @@ class AnomalyManager:
             event_type,
             state,
         ) in list(self.states.items()):
+
             self._reset_state(
                 event_type,
                 state,
@@ -1512,10 +2189,6 @@ class AnomalyManager:
         self.states.clear()
 
         print("[ANOMALY] All anomaly states reset.")
-
-    # ============================================================
-    # STATE HELPERS
-    # ============================================================
 
     def get_state(
         self,
@@ -1526,29 +2199,27 @@ class AnomalyManager:
         state = self.states.get(event_type)
 
         if state is None:
+
             return {
                 "started_at": None,
                 "last_active_at": None,
                 "last_capture_at": None,
                 "confirmed": False,
+                "captured_in_incident": False,
             }
 
-        return dict(state)
+        result = dict(state)
+
+        if "captured_in_incident" not in result:
+
+            result["captured_in_incident"] = False
+
+        return result
 
     def get_all_states(
         self,
     ):
-        return {
-            event_type: dict(state)
-            for (
-                event_type,
-                state,
-            ) in self.states.items()
-        }
-
-    # ============================================================
-    # CLOSE
-    # ============================================================
+        return {event_type: self.get_state(event_type) for event_type in self.states}
 
     def close(
         self,
