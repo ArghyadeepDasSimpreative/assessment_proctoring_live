@@ -1072,7 +1072,7 @@ class AnomalyManager:
                 ),
                 "recovery_grace": 0.75,
                 "capture_once_per_incident": True,
-                "minimum_audio_duration": 2.0,
+                "minimum_audio_duration": 0.25,
             },
         }
 
