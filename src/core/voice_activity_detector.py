@@ -1,16 +1,23 @@
 import math
+
 from collections import deque
 
+
 import numpy as np
+
 import webrtcvad
 
 try:
+
     from silero_vad_lite import SileroVAD
+
 except Exception:
+
     SileroVAD = None
 
 
 class VoiceActivityDetector:
+
     SUPPORTED_VAD_SAMPLE_RATES = (
         8000,
         16000,
@@ -19,17 +26,18 @@ class VoiceActivityDetector:
     )
 
     SILERO_SAMPLE_RATE = 16000
+
     SILERO_CHUNK_SAMPLES = 512
 
     def __init__(
         self,
         frame_duration_ms=30,
-        required_voice_duration=2.0,
+        required_voice_duration=1.5,
         aggressiveness=1,
         calibration_seconds=1.0,
         smoothing_window_seconds=0.30,
         minimum_voice_ratio=0.40,
-        silence_reset_seconds=0.75,
+        silence_reset_seconds=5.0,
         whisper_noise_margin_db=5.0,
         whisper_absolute_floor_db=-62.0,
         use_silero=True,
@@ -40,11 +48,13 @@ class VoiceActivityDetector:
         whisper_silero_threshold=0.04,
         whisper_history_seconds=0.42,
     ):
+
         if frame_duration_ms not in (
             10,
             20,
             30,
         ):
+
             raise ValueError("frame_duration_ms must be 10, 20, or 30.")
 
         aggressiveness = max(
@@ -190,6 +200,16 @@ class VoiceActivityDetector:
 
         self.incident_number = 0
 
+        # Per-frame transition metadata. These are additive and preserve the
+        # existing public result keys while allowing consumers to distinguish
+        # speech-segment changes from the full logical voice incident.
+        self._just_started = False
+        self._just_ended = False
+        self._ended_incident_number = None
+        self._ended_voice_duration = 0.0
+        self._ended_silence_duration = 0.0
+        self._ended_incident_confirmed = False
+
         self.total_frames = 0
 
         self.silero_vad = None
@@ -214,6 +234,7 @@ class VoiceActivityDetector:
     def _initialize_silero(
         self,
     ):
+
         self.silero_vad = None
 
         self.silero_available = False
@@ -234,6 +255,7 @@ class VoiceActivityDetector:
         self.silero_probability_history.clear()
 
         if not self.use_silero:
+
             return
 
         if SileroVAD is None:
@@ -260,6 +282,7 @@ class VoiceActivityDetector:
         self,
         audio,
     ):
+
         if isinstance(
             audio,
             np.ndarray,
@@ -299,6 +322,7 @@ class VoiceActivityDetector:
         source_sample_rate,
         target_sample_rate,
     ):
+
         source_sample_rate = int(source_sample_rate)
 
         target_sample_rate = int(target_sample_rate)
@@ -357,6 +381,7 @@ class VoiceActivityDetector:
         samples,
         source_sample_rate,
     ):
+
         target_sample_rate = 16000
 
         samples = self._resample(
@@ -394,6 +419,7 @@ class VoiceActivityDetector:
         self,
         samples,
     ):
+
         if len(samples) == 0:
 
             return 0.0
@@ -406,6 +432,7 @@ class VoiceActivityDetector:
         self,
         rms,
     ):
+
         if rms <= 0:
 
             return -100.0
@@ -424,6 +451,7 @@ class VoiceActivityDetector:
         self,
         samples,
     ):
+
         if len(samples) < 2:
 
             return 0.0
@@ -439,6 +467,7 @@ class VoiceActivityDetector:
         samples,
         sample_rate,
     ):
+
         if len(samples) < 32:
 
             return {
@@ -508,6 +537,7 @@ class VoiceActivityDetector:
         self,
         dbfs,
     ):
+
         if self.calibrated:
 
             return False
@@ -545,6 +575,7 @@ class VoiceActivityDetector:
         self,
         dbfs,
     ):
+
         dbfs = float(dbfs)
 
         if dbfs <= -99.0:
@@ -562,6 +593,7 @@ class VoiceActivityDetector:
         spectral_flatness,
         zero_crossing_rate,
     ):
+
         self.feature_history.append(
             {
                 "dbfs": float(dbfs),
@@ -574,6 +606,7 @@ class VoiceActivityDetector:
     def _temporal_features(
         self,
     ):
+
         if len(self.feature_history) < 3:
 
             return {
@@ -620,6 +653,7 @@ class VoiceActivityDetector:
     def _effective_whisper_minimum_level(
         self,
     ):
+
         effective_margin = max(
             2.5,
             self.whisper_noise_margin_db - 0.75,
@@ -642,6 +676,7 @@ class VoiceActivityDetector:
         speech_band_ratio,
         spectral_flatness,
     ):
+
         minimum_level = self._effective_whisper_minimum_level()
 
         detected = bool(
@@ -660,6 +695,7 @@ class VoiceActivityDetector:
         self,
         detected,
     ):
+
         self.whisper_history.append(bool(detected))
 
         if len(self.whisper_history) < 3:
@@ -682,6 +718,7 @@ class VoiceActivityDetector:
         self,
         detected,
     ):
+
         self.webrtc_history.append(bool(detected))
 
         if not self.webrtc_history:
@@ -696,6 +733,7 @@ class VoiceActivityDetector:
         self,
         samples,
     ):
+
         if not self.silero_available or self.silero_vad is None:
 
             return (
@@ -807,6 +845,7 @@ class VoiceActivityDetector:
     def _silero_recent_stats(
         self,
     ):
+
         if not self.silero_probability_history:
 
             return {
@@ -836,6 +875,7 @@ class VoiceActivityDetector:
         temporal,
         silero_stats,
     ):
+
         minimum_level = max(
             -66.0,
             self.noise_floor_dbfs + 1.5,
@@ -955,6 +995,7 @@ class VoiceActivityDetector:
         speech_band_ratio,
         spectral_flatness,
     ):
+
         if not whisper_persistent:
 
             return (
@@ -1016,6 +1057,7 @@ class VoiceActivityDetector:
         self,
         detected,
     ):
+
         self.activity_history.append(bool(detected))
 
         if not self.activity_history:
@@ -1036,6 +1078,7 @@ class VoiceActivityDetector:
     def _reset_incident(
         self,
     ):
+
         self.voice_duration = 0.0
 
         self.silence_duration = 0.0
@@ -1048,6 +1091,7 @@ class VoiceActivityDetector:
         self,
         recalibrate=False,
     ):
+
         self.activity_history.clear()
 
         self.whisper_history.clear()
@@ -1057,6 +1101,13 @@ class VoiceActivityDetector:
         self.webrtc_history.clear()
 
         self._reset_incident()
+
+        self._just_started = False
+        self._just_ended = False
+        self._ended_incident_number = None
+        self._ended_voice_duration = 0.0
+        self._ended_silence_duration = 0.0
+        self._ended_incident_confirmed = False
 
         self.total_frames = 0
 
@@ -1092,6 +1143,7 @@ class VoiceActivityDetector:
         temporal,
         webrtc_ratio,
     ):
+
         silero_speech = bool(
             self.silero_available
             and float(
@@ -1121,6 +1173,24 @@ class VoiceActivityDetector:
             "confirmed": bool(self.incident_confirmed),
             "just_confirmed": bool(just_confirmed),
             "incident_number": self.incident_number,
+            "incident_active": bool(self.incident_active),
+            "cumulative_voice_duration_seconds": round(
+                self.voice_duration,
+                3,
+            ),
+            "incident_end_silence_seconds": self.silence_reset_seconds,
+            "just_started": bool(self._just_started),
+            "just_ended": bool(self._just_ended),
+            "ended_incident_number": self._ended_incident_number,
+            "ended_voice_duration_seconds": round(
+                self._ended_voice_duration,
+                3,
+            ),
+            "ended_silence_duration_seconds": round(
+                self._ended_silence_duration,
+                3,
+            ),
+            "ended_incident_confirmed": bool(self._ended_incident_confirmed),
             "rms": round(
                 float(rms),
                 3,
@@ -1200,6 +1270,7 @@ class VoiceActivityDetector:
         audio,
         sample_rate,
     ):
+
         source_samples = self._pcm16_samples(audio)
 
         (
@@ -1209,6 +1280,14 @@ class VoiceActivityDetector:
             source_samples,
             sample_rate,
         )
+
+        # Transition fields describe only this frame.
+        self._just_started = False
+        self._just_ended = False
+        self._ended_incident_number = None
+        self._ended_voice_duration = 0.0
+        self._ended_silence_duration = 0.0
+        self._ended_incident_confirmed = False
 
         self.total_frames += 1
 
@@ -1355,34 +1434,46 @@ class VoiceActivityDetector:
 
         just_confirmed = False
 
-        if voice_active:
+        # `raw_voice_detected` is already the fused human-speech decision made
+        # by the normal/whisper classifiers. Use it for incident accounting so
+        # silence is never added to cumulative speech time. `voice_active` is
+        # still returned unchanged for backward-compatible smoothed UI/state.
+        speech_present = bool(raw_voice_detected)
+
+        if speech_present:
 
             if not self.incident_active:
-
                 self.incident_active = True
-
                 self.incident_number += 1
+                self._just_started = True
 
+            # Count ONLY frames that were classified as human speech. Any gap,
+            # even while the logical incident remains alive, contributes zero.
             self.voice_duration += self.frame_duration_seconds
-
             self.silence_duration = 0.0
 
             if (
                 not self.incident_confirmed
                 and self.voice_duration >= self.required_voice_duration
             ):
-
                 self.incident_confirmed = True
-
                 just_confirmed = True
 
         elif self.incident_active:
 
+            # The same incident remains open during short pauses. Only five
+            # CONTINUOUS seconds without human speech closes it. If speech
+            # returns before this threshold, the branch above resets this timer
+            # to zero and cumulative speech continues from its previous value.
             self.silence_duration += self.frame_duration_seconds
 
             if self.silence_duration >= self.silence_reset_seconds:
-
+                self._ended_incident_number = self.incident_number
+                self._ended_voice_duration = self.voice_duration
+                self._ended_silence_duration = self.silence_duration
+                self._ended_incident_confirmed = self.incident_confirmed
                 self._reset_incident()
+                self._just_ended = True
 
         return self._build_result(
             calibrating=False,

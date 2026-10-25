@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import cv2
 
-from src.vision.face_detector_yunet import YuNetFaceDetector
+from src.vision.face_detector_mediapipe import MediaPipeFaceDetector
 from src.vision.face_landmarker import FaceLandmarker
 from src.vision.gaze_tracker import GazeTracker
 from src.vision.head_tracker import HeadTracker
@@ -26,12 +26,15 @@ WINDOW_NAME = "Skolariq Proctoring - Production Engine Preview Test"
 
 
 # Voice detection tuning for test_v2 only.
-# The core detector still decides whether a sound is human speech. Once it
-# recognizes a valid speech burst, the test confirms the anomaly immediately.
-VOICE_TRIGGER_SECONDS = 0.03
+# Human speech starts a logical incident, but speech by itself is NOT immediately
+# a violation. Only cumulative HUMAN-SPEECH time counts toward the threshold.
+# Short pauses are excluded from the speech total and preserve the same incident.
+# The incident ends only after 5 continuous seconds without human speech.
+VOICE_TRIGGER_SECONDS = 1.5
 VOICE_SMOOTHING_WINDOW_SECONDS = 0.06
-VOICE_DETECTOR_SILENCE_RESET_SECONDS = 0.35
-VOICE_SHORT_GAP_GRACE_SECONDS = 2.5
+VOICE_DETECTOR_SILENCE_RESET_SECONDS = 5.0
+# Kept for backward compatibility with existing status/metadata consumers.
+VOICE_SHORT_GAP_GRACE_SECONDS = 5.0
 VOICE_INCIDENT_END_SILENCE_SECONDS = 5.0
 
 
@@ -933,48 +936,30 @@ def draw_audio_status(
     audio_status,
     voice_anomaly_result,
 ):
-
     panel_width = min(
         300,
         frame.shape[1] - 10,
     )
-
     panel_height = 138
-
     x1 = 5
-
     y1 = max(
         170,
         frame.shape[0] - panel_height - 5,
     )
-
     x2 = x1 + panel_width
-
     y2 = min(
         frame.shape[0] - 5,
         y1 + panel_height,
     )
 
     overlay = frame.copy()
-
     cv2.rectangle(
         overlay,
-        (
-            x1,
-            y1,
-        ),
-        (
-            x2,
-            y2,
-        ),
-        (
-            0,
-            0,
-            0,
-        ),
+        (x1, y1),
+        (x2, y2),
+        (0, 0, 0),
         -1,
     )
-
     cv2.addWeighted(
         overlay,
         0.72,
@@ -984,306 +969,123 @@ def draw_audio_status(
         frame,
     )
 
-    active_microphone = (
-        audio_status.get("active_microphone")
-        if isinstance(
-            audio_status,
-            dict,
-        )
-        else None
-    )
+    if not isinstance(audio_status, dict):
+        audio_status = {}
+    if not isinstance(voice_anomaly_result, dict):
+        voice_anomaly_result = {}
 
+    active_microphone = audio_status.get("active_microphone")
     microphone_name = (
-        active_microphone.get("name")
-        if isinstance(
-            active_microphone,
-            dict,
-        )
-        else None
+        active_microphone.get("name") if isinstance(active_microphone, dict) else None
     )
-
     if not microphone_name:
-
         microphone_name = "Unavailable"
-
     microphone_name = str(microphone_name)
-
     if len(microphone_name) > 34:
-
         microphone_name = microphone_name[:31] + "..."
 
-    microphone_available = bool(
-        audio_status.get(
-            "microphone_available",
-            False,
-        )
-    )
+    microphone_available = bool(audio_status.get("microphone_available", False))
+    calibrating = bool(audio_status.get("calibrating", False))
+    voice_active = bool(audio_status.get("voice_active", False))
+    voice_confirmed = bool(audio_status.get("voice_confirmed", False))
 
-    calibrating = bool(
+    voice_duration = float(audio_status.get("voice_duration_seconds", 0.0) or 0.0)
+    cumulative_voice_duration = float(
         audio_status.get(
-            "calibrating",
-            False,
-        )
-    )
-
-    voice_active = bool(
-        audio_status.get(
-            "voice_active",
-            False,
-        )
-    )
-
-    voice_confirmed = bool(
-        audio_status.get(
-            "voice_confirmed",
-            False,
-        )
-    )
-
-    voice_duration = float(
-        audio_status.get(
-            "voice_duration_seconds",
-            0.0,
+            "cumulative_voice_duration_seconds",
+            voice_duration,
         )
         or 0.0
     )
 
-    whisper_candidate = bool(
-        audio_status.get(
-            "whisper_candidate",
-            False,
-        )
-    )
-
+    whisper_candidate = bool(audio_status.get("whisper_candidate", False))
     detection_source = audio_status.get("detection_source") or "-"
+    dbfs = float(audio_status.get("dbfs", -100.0) or -100.0)
+    noise_floor = float(audio_status.get("noise_floor_dbfs", -60.0) or -60.0)
 
-    dbfs = float(
-        audio_status.get(
-            "dbfs",
-            -100.0,
-        )
-        or -100.0
-    )
-
-    noise_floor = float(
-        audio_status.get(
-            "noise_floor_dbfs",
-            -60.0,
-        )
-        or -60.0
-    )
-
-    evidence_captured = bool(
-        voice_anomaly_result.get(
-            "captured",
-            False,
-        )
-        if isinstance(
-            voice_anomaly_result,
-            dict,
-        )
-        else False
-    )
-
+    evidence_captured = bool(voice_anomaly_result.get("captured", False))
     incident_active = bool(
-        voice_anomaly_result.get(
-            "_voice_incident_active",
-            False,
-        )
-        if isinstance(
-            voice_anomaly_result,
-            dict,
-        )
-        else False
+        audio_status.get("incident_active", False)
+        or voice_anomaly_result.get("_voice_incident_active", False)
     )
-
     incident_confirmed = bool(
-        voice_anomaly_result.get(
-            "confirmed",
-            False,
-        )
-        if isinstance(
-            voice_anomaly_result,
-            dict,
-        )
-        else False
+        voice_anomaly_result.get("confirmed", False) or voice_confirmed
     )
-
-    incident_duration = float(
-        voice_anomaly_result.get(
-            "incident_duration_seconds",
-            0.0,
-        )
-        or 0.0
-    )
-
     incident_silence = float(
-        voice_anomaly_result.get(
+        audio_status.get(
             "silence_duration_seconds",
-            0.0,
+            voice_anomaly_result.get("silence_duration_seconds", 0.0),
         )
         or 0.0
+    )
+
+    required_voice_duration = float(
+        audio_status.get(
+            "required_voice_duration_seconds",
+            VOICE_TRIGGER_SECONDS,
+        )
+        or VOICE_TRIGGER_SECONDS
     )
 
     if calibrating:
-
         voice_text = "CALIBRATING"
-
-        voice_color = (
-            0,
-            255,
-            255,
-        )
-
+        voice_color = (0, 255, 255)
     elif incident_active and incident_confirmed:
-
-        if incident_silence > 0.0:
-            voice_text = "VIOLATION / HOLD"
-        else:
-            voice_text = "VIOLATION"
-
-        voice_color = (
-            0,
-            0,
-            255,
-        )
-
+        voice_text = "VIOLATION / HOLD" if incident_silence > 0.0 else "VIOLATION"
+        voice_color = (0, 0, 255)
+    elif incident_active:
+        # Human speech has been detected, but cumulative speech has NOT yet
+        # crossed the anomaly threshold. This is tracking, not a violation.
+        voice_text = "TRACKING / HOLD" if incident_silence > 0.0 else "TRACKING"
+        voice_color = (0, 255, 255)
     elif evidence_captured:
-
         voice_text = "VIOLATION"
-
-        voice_color = (
-            0,
-            0,
-            255,
-        )
-
-    elif voice_confirmed:
-
-        voice_text = "CONFIRMED"
-
-        voice_color = (
-            0,
-            165,
-            255,
-        )
-
+        voice_color = (0, 0, 255)
     elif voice_active:
-
-        voice_text = "ACTIVE"
-
-        voice_color = (
-            0,
-            255,
-            255,
-        )
-
+        voice_text = "SPEECH"
+        voice_color = (0, 255, 255)
     else:
-
         voice_text = "QUIET"
+        voice_color = (0, 255, 0)
 
-        voice_color = (
-            0,
-            255,
-            0,
-        )
+    microphone_color = (0, 255, 0) if microphone_available else (0, 0, 255)
 
-    microphone_color = (
-        (
-            0,
-            255,
-            0,
+    if incident_active:
+        progress_text = (
+            f"Speech: {cumulative_voice_duration:.2f}/{required_voice_duration:.2f}s "
+            f"| gap={incident_silence:.2f}s"
         )
-        if microphone_available
-        else (
-            0,
-            0,
-            255,
+    else:
+        progress_text = (
+            f"Speech: {cumulative_voice_duration:.2f}/{required_voice_duration:.2f}s"
         )
-    )
 
     rows = [
+        ("AUDIO STATUS", y1 + 20, 0.46, (255, 255, 255), 2),
+        (f"Mic: {microphone_name}", y1 + 42, 0.32, microphone_color, 1),
+        (f"Voice: {voice_text}", y1 + 64, 0.36, voice_color, 1),
+        (progress_text, y1 + 86, 0.31, (255, 255, 255), 1),
         (
-            "AUDIO STATUS",
-            y1 + 20,
-            0.46,
-            (
-                255,
-                255,
-                255,
-            ),
-            2,
-        ),
-        (
-            f"Mic: {microphone_name}",
-            y1 + 42,
-            0.32,
-            microphone_color,
-            1,
-        ),
-        (
-            f"Voice: {voice_text}",
-            y1 + 64,
-            0.36,
-            voice_color,
-            1,
-        ),
-        (
-            (
-                "Incident: "
-                f"{incident_duration:.2f}s "
-                f"| silence={incident_silence:.2f}s"
-                if incident_active
-                else f"Voice time: {voice_duration:.2f}s"
-            ),
-            y1 + 86,
-            0.34,
-            (
-                255,
-                255,
-                255,
-            ),
-            1,
-        ),
-        (
-            "Source: " f"{detection_source} " "| whisper=" f"{whisper_candidate}",
+            f"Source: {detection_source} | whisper={whisper_candidate}",
             y1 + 108,
             0.31,
-            (
-                255,
-                255,
-                255,
-            ),
+            (255, 255, 255),
             1,
         ),
         (
-            "Level: " f"{dbfs:.1f} dBFS " "| noise=" f"{noise_floor:.1f}",
+            f"Level: {dbfs:.1f} dBFS | noise={noise_floor:.1f}",
             y1 + 130,
             0.30,
-            (
-                255,
-                255,
-                255,
-            ),
+            (255, 255, 255),
             1,
         ),
     ]
 
-    for (
-        text,
-        y,
-        scale,
-        color,
-        thickness,
-    ) in rows:
-
+    for text, y, scale, color, thickness in rows:
         cv2.putText(
             frame,
             text,
-            (
-                x1 + 10,
-                y,
-            ),
+            (x1 + 10, y),
             cv2.FONT_HERSHEY_SIMPLEX,
             scale,
             color,
@@ -1293,9 +1095,10 @@ def draw_audio_status(
 
 
 def empty_voice_anomaly_result():
-
     return {
         "event_type": "VOICE_DETECTED",
+        # `active` means anomaly-active for the AnomalyManager/UI. Human speech
+        # tracking before 3 cumulative seconds intentionally leaves this False.
         "active": False,
         "confirmed": False,
         "captured": False,
@@ -1306,6 +1109,7 @@ def empty_voice_anomaly_result():
         "evidence": None,
         "api_violation": None,
         "incident_duration_seconds": 0.0,
+        "cumulative_voice_duration_seconds": 0.0,
         "silence_duration_seconds": 0.0,
         "short_gap_grace_seconds": VOICE_SHORT_GAP_GRACE_SECONDS,
         "incident_end_silence_seconds": VOICE_INCIDENT_END_SILENCE_SECONDS,
@@ -1313,225 +1117,230 @@ def empty_voice_anomaly_result():
         "_voice_incident_started_at": None,
         "_voice_last_activity_at": None,
         "_voice_silence_started_at": None,
+        "_voice_speech_active": False,
         "_voice_incident_captured": False,
         "_voice_incident_number": 0,
+        "_voice_core_incident_events_seen": False,
     }
 
 
-def configure_voice_anomaly_for_test(
-    anomaly_manager,
-):
+def configure_voice_anomaly_for_test(anomaly_manager):
     """
-    Configure only the VOICE_DETECTED rule for this preview test.
+    Configure the AnomalyManager to accept a VOICE_DETECTED event immediately
+    AFTER the core VoiceActivityDetector has already accumulated the required
+    3 seconds of actual human speech.
 
-    The detector itself still has to classify the input as human voice. The
-    anomaly layer then confirms that first valid speech event immediately,
-    regardless of how short the utterance was. Existing cooldown is preserved.
+    Human speech itself is not an anomaly here. The core detector owns the
+    cumulative-speech threshold and the 5-second continuous-silence boundary.
     """
-    rules = getattr(
-        anomaly_manager,
-        "rules",
-        None,
-    )
-
-    if not isinstance(
-        rules,
-        dict,
-    ):
+    rules = getattr(anomaly_manager, "rules", None)
+    if not isinstance(rules, dict):
         print(
             "[AUDIO] Warning: AnomalyManager rules are not exposed; "
-            "instant voice confirmation could not be configured."
+            "core-confirmed voice events will use the manager defaults."
         )
         return False
 
     voice_rule = rules.get("VOICE_DETECTED")
-
-    if not isinstance(
-        voice_rule,
-        dict,
-    ):
+    if not isinstance(voice_rule, dict):
         print(
             "[AUDIO] Warning: VOICE_DETECTED anomaly rule is unavailable; "
-            "instant voice confirmation could not be configured."
+            "core-confirmed voice events will use the manager defaults."
         )
         return False
 
-    # No minimum anomaly duration once the VAD has already declared that
-    # human speech exists. Keep the configured evidence cooldown untouched.
+    # The 3-second threshold is already enforced by VoiceActivityDetector. Do
+    # not make AnomalyManager wait another 3 seconds after confirmation arrives.
     voice_rule["duration"] = 0.0
     voice_rule["minimum_audio_duration"] = 0.0
     voice_rule["recovery_grace"] = 0.0
     voice_rule["capture_once_per_incident"] = True
 
     print(
-        "[AUDIO] VOICE_DETECTED configured for immediate confirmation "
-        f"| trigger={VOICE_TRIGGER_SECONDS:.2f}s "
-        f"| short_gap_grace={VOICE_SHORT_GAP_GRACE_SECONDS:.1f}s "
-        f"| incident_end_silence={VOICE_INCIDENT_END_SILENCE_SECONDS:.1f}s"
+        "[AUDIO] VOICE_DETECTED uses cumulative human-speech confirmation "
+        f"| speech_threshold={VOICE_TRIGGER_SECONDS:.1f}s "
+        f"| incident_end_silence={VOICE_INCIDENT_END_SILENCE_SECONDS:.1f}s "
+        "| pause_time_excluded=True"
     )
-
     return True
 
 
-def _voice_incident_elapsed(
+def _start_voice_tracking_incident(
     result,
     now,
+    incident_number=None,
+    core_event=False,
 ):
-    started_at = result.get("_voice_incident_started_at")
-
-    if started_at is None:
-        return 0.0
-
-    try:
-        return max(
-            0.0,
-            float(now) - float(started_at),
-        )
-    except (
-        TypeError,
-        ValueError,
-    ):
-        return 0.0
-
-
-def _voice_silence_elapsed(
-    result,
-    now,
-):
-    silence_started_at = result.get("_voice_silence_started_at")
-
-    if silence_started_at is None:
-        return 0.0
-
-    try:
-        return max(
-            0.0,
-            float(now) - float(silence_started_at),
-        )
-    except (
-        TypeError,
-        ValueError,
-    ):
-        return 0.0
-
-
-def _keep_voice_incident_visible(
-    result,
-    now,
-):
-    if not result.get(
-        "_voice_incident_active",
-        False,
-    ):
+    if result.get("_voice_incident_active", False):
+        if core_event:
+            result["_voice_core_incident_events_seen"] = True
         return result
 
-    result["active"] = True
-    result["confirmed"] = True
-    result["captured"] = bool(
-        result.get(
-            "_voice_incident_captured",
-            False,
-        )
+    previous_number = int(result.get("_voice_incident_number", 0) or 0)
+    if incident_number is None:
+        incident_number = previous_number + 1
+    else:
+        try:
+            incident_number = int(incident_number)
+        except (TypeError, ValueError):
+            incident_number = previous_number + 1
+
+    result.update(
+        {
+            "active": False,
+            "confirmed": False,
+            "captured": False,
+            "duration": 0.0,
+            "required_duration": VOICE_TRIGGER_SECONDS,
+            "incident_duration_seconds": 0.0,
+            "cumulative_voice_duration_seconds": 0.0,
+            "silence_duration_seconds": 0.0,
+            "_voice_incident_active": True,
+            "_voice_incident_started_at": now,
+            "_voice_last_activity_at": now,
+            "_voice_silence_started_at": None,
+            "_voice_speech_active": True,
+            "_voice_incident_captured": False,
+            "_voice_incident_number": incident_number,
+        }
     )
-    result["incident_duration_seconds"] = _voice_incident_elapsed(
-        result,
-        now,
+    if core_event:
+        result["_voice_core_incident_events_seen"] = True
+
+    print(
+        "[AUDIO][VOICE TRACKING STARTED] "
+        f"incident={incident_number} "
+        f"threshold={VOICE_TRIGGER_SECONDS:.1f}s cumulative speech"
     )
-    result["silence_duration_seconds"] = _voice_silence_elapsed(
-        result,
-        now,
-    )
+    return result
+
+
+def _refresh_voice_tracking_state(result, now):
+    if not result.get("_voice_incident_active", False):
+        result["silence_duration_seconds"] = 0.0
+        return result
+
+    silence_started_at = result.get("_voice_silence_started_at")
+    if silence_started_at is None:
+        result["silence_duration_seconds"] = 0.0
+    else:
+        try:
+            result["silence_duration_seconds"] = max(
+                0.0,
+                float(now) - float(silence_started_at),
+            )
+        except (TypeError, ValueError):
+            result["silence_duration_seconds"] = 0.0
+
     result["required_duration"] = VOICE_TRIGGER_SECONDS
     result["short_gap_grace_seconds"] = VOICE_SHORT_GAP_GRACE_SECONDS
     result["incident_end_silence_seconds"] = VOICE_INCIDENT_END_SILENCE_SECONDS
 
+    # Before 3 cumulative seconds, this is TRACKING only, not an anomaly.
+    if not result.get("confirmed", False):
+        result["active"] = False
+    else:
+        # Once confirmed, short pauses do not deactivate the anomaly.
+        result["active"] = True
+
     return result
 
 
-def _finish_voice_incident_if_silent(
+def _close_voice_tracking_incident(
     result,
     anomaly_manager,
     now,
+    cumulative_voice_duration=None,
+    continuous_silence=None,
+    confirmed=None,
+    ended_by_core=False,
 ):
-    if not result.get(
-        "_voice_incident_active",
-        False,
-    ):
+    if not result.get("_voice_incident_active", False):
         return result
 
-    silence_started_at = result.get("_voice_silence_started_at")
+    incident_number = int(result.get("_voice_incident_number", 0) or 0)
+    was_confirmed = bool(
+        result.get("confirmed", False) if confirmed is None else confirmed
+    )
 
-    if silence_started_at is None:
-        return _keep_voice_incident_visible(
-            result,
-            now,
+    if cumulative_voice_duration is None:
+        cumulative_voice_duration = float(
+            result.get("cumulative_voice_duration_seconds", 0.0) or 0.0
+        )
+    else:
+        cumulative_voice_duration = float(cumulative_voice_duration or 0.0)
+
+    if continuous_silence is None:
+        continuous_silence = float(result.get("silence_duration_seconds", 0.0) or 0.0)
+    else:
+        continuous_silence = float(continuous_silence or 0.0)
+
+    ended_result = None
+    if was_confirmed:
+        ended_result = anomaly_manager.update_audio(
+            event_type="VOICE_DETECTED",
+            active=False,
+            audio_evidence=None,
+            metadata={
+                "incident_number": incident_number,
+                "cumulative_voice_duration_seconds": round(
+                    cumulative_voice_duration,
+                    3,
+                ),
+                "continuous_silence_seconds": round(continuous_silence, 3),
+                "confirmation_threshold_seconds": VOICE_TRIGGER_SECONDS,
+                "pause_time_excluded": True,
+                "ended_by_core_incident_event": bool(ended_by_core),
+            },
         )
 
-    silence_elapsed = _voice_silence_elapsed(
-        result,
-        now,
+    fresh = empty_voice_anomaly_result()
+    fresh["_voice_incident_number"] = incident_number
+    fresh["_voice_core_incident_events_seen"] = bool(
+        result.get("_voice_core_incident_events_seen", False) or ended_by_core
     )
 
-    if silence_elapsed < VOICE_INCIDENT_END_SILENCE_SECONDS:
-        return _keep_voice_incident_visible(
-            result,
-            now,
+    if isinstance(ended_result, dict):
+        fresh["cooldown"] = float(ended_result.get("cooldown", 0.0) or 0.0)
+        fresh["cooldown_remaining"] = float(
+            ended_result.get("cooldown_remaining", 0.0) or 0.0
         )
-
-    incident_duration = _voice_incident_elapsed(
-        result,
-        now,
-    )
-
-    incident_number = result.get(
-        "_voice_incident_number",
-        0,
-    )
-
-    ended_result = anomaly_manager.update_audio(
-        event_type="VOICE_DETECTED",
-        active=False,
-        audio_evidence=None,
-        metadata={
-            "incident_number": incident_number,
-            "incident_duration_seconds": round(
-                incident_duration,
-                3,
-            ),
-            "continuous_silence_seconds": round(
-                silence_elapsed,
-                3,
-            ),
-            "ended_by_test_v2_hold": True,
-        },
-    )
-
-    if not isinstance(
-        ended_result,
-        dict,
-    ):
-        ended_result = empty_voice_anomaly_result()
-
-    ended_result["incident_duration_seconds"] = incident_duration
-    ended_result["silence_duration_seconds"] = silence_elapsed
-    ended_result["required_duration"] = VOICE_TRIGGER_SECONDS
-    ended_result["short_gap_grace_seconds"] = VOICE_SHORT_GAP_GRACE_SECONDS
-    ended_result["incident_end_silence_seconds"] = VOICE_INCIDENT_END_SILENCE_SECONDS
-    ended_result["_voice_incident_active"] = False
-    ended_result["_voice_incident_started_at"] = None
-    ended_result["_voice_last_activity_at"] = None
-    ended_result["_voice_silence_started_at"] = None
-    ended_result["_voice_incident_captured"] = False
-    ended_result["_voice_incident_number"] = incident_number
 
     print(
         "[AUDIO][VOICE INCIDENT ENDED] "
         f"incident={incident_number} "
-        f"duration={incident_duration:.2f}s "
-        f"continuous_silence={silence_elapsed:.2f}s"
+        f"cumulative_speech={cumulative_voice_duration:.2f}s "
+        f"continuous_silence={continuous_silence:.2f}s "
+        f"anomaly={was_confirmed}"
     )
+    return fresh
 
-    return ended_result
+
+def _legacy_finish_voice_incident_if_needed(
+    result,
+    anomaly_manager,
+    now,
+):
+    """Fallback for older AudioMonitor versions without INCIDENT_ENDED."""
+    result = _refresh_voice_tracking_state(result, now)
+
+    if not result.get("_voice_incident_active", False):
+        return result
+
+    if result.get("_voice_core_incident_events_seen", False):
+        return result
+
+    silence_elapsed = float(result.get("silence_duration_seconds", 0.0) or 0.0)
+    if silence_elapsed < VOICE_INCIDENT_END_SILENCE_SECONDS:
+        return result
+
+    return _close_voice_tracking_incident(
+        result=result,
+        anomaly_manager=anomaly_manager,
+        now=now,
+        continuous_silence=silence_elapsed,
+        ended_by_core=False,
+    )
 
 
 def process_audio_events(
@@ -1540,116 +1349,122 @@ def process_audio_events(
     current_result,
 ):
     """
-    Convert raw AudioMonitor speech events into one held VOICE_DETECTED incident.
+    Convert AudioMonitor events into the preview's VOICE_DETECTED state.
 
-    Behavior:
-    - First VAD-confirmed human speech starts and confirms the violation.
-    - No multi-second anomaly confirmation wait exists in test_v2.
-    - VOICE_ACTIVITY_ENDED does NOT immediately end the anomaly.
-    - Speech resuming during the hold continues the same incident.
-    - Only 5 seconds of continuous no-voice time closes the incident.
+    Required behavior:
+    - Proper human speech starts TRACKING, not an anomaly.
+    - Only actual detected human-speech frames contribute to cumulative speech.
+    - Silence/pause time contributes zero seconds to the anomaly threshold.
+    - Speech returning before 5 continuous seconds of silence continues the same
+      incident and continues from the previous cumulative speech total.
+    - The anomaly is confirmed only once cumulative speech reaches 3 seconds.
+    - Once confirmed, it remains the same anomaly through short pauses.
+    - The logical incident ends only after 5 continuous seconds without speech.
     - No evidence media is written because NoEvidenceStore remains in use.
+
+    New AudioMonitor versions emit VOICE_INCIDENT_STARTED/ENDED. Legacy
+    VOICE_ACTIVITY_STARTED/ENDED behavior is retained as a fallback.
     """
     result = dict(current_result or empty_voice_anomaly_result())
-
     now = time.monotonic()
-
-    # If the previous detector-level speech segment ended long enough ago,
-    # close the held anomaly before consuming a possible new speech segment.
-    result = _finish_voice_incident_if_silent(
+    result = _legacy_finish_voice_incident_if_needed(
         result=result,
         anomaly_manager=anomaly_manager,
         now=now,
     )
 
     while True:
-
         try:
-
             payload = audio_event_queue.get_nowait()
-
         except queue.Empty:
-
             break
 
-        if not isinstance(
-            payload,
-            dict,
-        ):
-
+        if not isinstance(payload, dict):
             continue
 
-        event_type = (
-            str(
-                payload.get(
-                    "event_type",
-                    "",
-                )
-            )
-            .upper()
-            .strip()
-        )
-
+        event_type = str(payload.get("event_type", "")).upper().strip()
         now = time.monotonic()
 
+        if event_type == "VOICE_INCIDENT_STARTED":
+            result = _start_voice_tracking_incident(
+                result=result,
+                now=now,
+                incident_number=payload.get("incident_number"),
+                core_event=True,
+            )
+            continue
+
+        if event_type == "VOICE_ACTIVITY_STARTED":
+            if not result.get("_voice_incident_active", False):
+                result = _start_voice_tracking_incident(
+                    result=result,
+                    now=now,
+                    incident_number=payload.get("incident_number"),
+                    core_event=False,
+                )
+
+            result["_voice_speech_active"] = True
+            result["_voice_last_activity_at"] = now
+            result["_voice_silence_started_at"] = None
+            result["silence_duration_seconds"] = 0.0
+            continue
+
+        if event_type == "VOICE_ACTIVITY_ENDED":
+            if result.get("_voice_incident_active", False):
+                result["_voice_speech_active"] = False
+                if result.get("_voice_silence_started_at") is None:
+                    result["_voice_silence_started_at"] = now
+                    print(
+                        "[AUDIO][VOICE PAUSE] "
+                        "Speech stopped; cumulative speech is preserved. "
+                        f"Waiting {VOICE_INCIDENT_END_SILENCE_SECONDS:.1f}s "
+                        "of continuous silence before ending the incident."
+                    )
+                result = _refresh_voice_tracking_state(result, now)
+            continue
+
         if event_type == "VOICE_DETECTED":
-
-            was_incident_active = bool(
-                result.get(
-                    "_voice_incident_active",
-                    False,
+            if not result.get("_voice_incident_active", False):
+                result = _start_voice_tracking_incident(
+                    result=result,
+                    now=now,
+                    incident_number=payload.get("incident_number"),
+                    core_event=False,
                 )
+
+            cumulative_voice_duration = float(
+                payload.get(
+                    "cumulative_voice_duration_seconds",
+                    payload.get("voice_duration_seconds", VOICE_TRIGGER_SECONDS),
+                )
+                or 0.0
             )
-
-            previous_incident_started_at = result.get("_voice_incident_started_at")
-
-            previous_incident_number = int(
-                result.get(
-                    "_voice_incident_number",
-                    0,
-                )
-                or 0
-            )
-
-            previous_incident_captured = bool(
-                result.get(
-                    "_voice_incident_captured",
-                    False,
-                )
-            )
-
-            if not was_incident_active:
-                previous_incident_number += 1
-                previous_incident_started_at = now
-                previous_incident_captured = False
-
-                print(
-                    "[AUDIO][VOICE INCIDENT STARTED] "
-                    f"incident={previous_incident_number}"
-                )
+            result["cumulative_voice_duration_seconds"] = cumulative_voice_duration
+            result["incident_duration_seconds"] = cumulative_voice_duration
+            result["duration"] = cumulative_voice_duration
+            result["_voice_last_activity_at"] = now
+            result["_voice_silence_started_at"] = None
+            result["_voice_speech_active"] = True
+            result["silence_duration_seconds"] = 0.0
 
             audio_evidence = payload.get("evidence_audio")
-
             metadata = {
                 key: value
-                for (
-                    key,
-                    value,
-                ) in payload.items()
-                if key
-                not in {
-                    "event_type",
-                    "evidence_audio",
-                }
+                for key, value in payload.items()
+                if key not in {"event_type", "evidence_audio"}
             }
-
             metadata.update(
                 {
-                    "incident_number": previous_incident_number,
-                    "instant_confirmation": True,
-                    "incident_hold_silence_seconds": (
+                    "incident_number": result.get("_voice_incident_number", 0),
+                    "cumulative_voice_duration_seconds": round(
+                        cumulative_voice_duration,
+                        3,
+                    ),
+                    "confirmation_threshold_seconds": VOICE_TRIGGER_SECONDS,
+                    "incident_end_silence_seconds": (
                         VOICE_INCIDENT_END_SILENCE_SECONDS
                     ),
+                    "pause_time_excluded": True,
                     "evidence_file_saving_disabled": True,
                 }
             )
@@ -1660,90 +1475,61 @@ def process_audio_events(
                 audio_evidence=audio_evidence,
                 metadata=metadata,
             )
+            if not isinstance(manager_result, dict):
+                manager_result = {}
 
-            if not isinstance(
-                manager_result,
-                dict,
-            ):
-                manager_result = empty_voice_anomaly_result()
-
-            manager_result["_voice_incident_active"] = True
-            manager_result["_voice_incident_started_at"] = previous_incident_started_at
-            manager_result["_voice_last_activity_at"] = now
-            manager_result["_voice_silence_started_at"] = None
-            manager_result["_voice_incident_number"] = previous_incident_number
-            manager_result["_voice_incident_captured"] = bool(
-                previous_incident_captured
-                or manager_result.get(
-                    "captured",
-                    False,
-                )
+            result["active"] = True
+            result["confirmed"] = True
+            result["captured"] = bool(
+                result.get("_voice_incident_captured", False)
+                or manager_result.get("captured", False)
+            )
+            result["_voice_incident_captured"] = result["captured"]
+            result["evidence"] = manager_result.get("evidence")
+            result["api_violation"] = manager_result.get("api_violation")
+            result["cooldown"] = float(manager_result.get("cooldown", 0.0) or 0.0)
+            result["cooldown_remaining"] = float(
+                manager_result.get("cooldown_remaining", 0.0) or 0.0
             )
 
-            # Once the real VAD has declared human speech, this preview's
-            # anomaly is confirmed immediately. Cooldown may still suppress a
-            # second evidence capture, but it does not un-confirm the incident.
-            manager_result["active"] = True
-            manager_result["confirmed"] = True
-            manager_result["captured"] = bool(
-                manager_result["_voice_incident_captured"]
+            print(
+                "[AUDIO][VOICE VIOLATION CONFIRMED] "
+                f"incident={result.get('_voice_incident_number', 0)} "
+                f"cumulative_speech={cumulative_voice_duration:.2f}s "
+                f"threshold={VOICE_TRIGGER_SECONDS:.1f}s"
             )
-            manager_result["required_duration"] = VOICE_TRIGGER_SECONDS
-            manager_result["incident_duration_seconds"] = _voice_incident_elapsed(
-                manager_result,
-                now,
-            )
-            manager_result["silence_duration_seconds"] = 0.0
-            manager_result["short_gap_grace_seconds"] = VOICE_SHORT_GAP_GRACE_SECONDS
-            manager_result["incident_end_silence_seconds"] = (
-                VOICE_INCIDENT_END_SILENCE_SECONDS
-            )
-
-            result = manager_result
-
-            if result.get(
-                "captured",
-                False,
-            ):
-
-                print(
-                    "[AUDIO][VOICE VIOLATION CONFIRMED] "
-                    f"incident={previous_incident_number} "
-                    "Evidence file saving is disabled in test_v2."
-                )
-
-            else:
-                print(
-                    "[AUDIO][VOICE VIOLATION CONFIRMED] "
-                    f"incident={previous_incident_number} "
-                    "No new evidence marker due to existing incident/cooldown."
-                )
-
             continue
 
-        if event_type == "VOICE_ACTIVITY_ENDED":
-
-            if result.get(
-                "_voice_incident_active",
-                False,
-            ):
-                if result.get("_voice_silence_started_at") is None:
-                    result["_voice_silence_started_at"] = now
-
-                    print(
-                        "[AUDIO][VOICE GAP] "
-                        "Detector-level speech stopped; keeping the violation "
-                        f"active for up to {VOICE_INCIDENT_END_SILENCE_SECONDS:.1f}s "
-                        "while waiting for speech to resume."
-                    )
-
-                result = _keep_voice_incident_visible(
-                    result,
-                    now,
+        if event_type == "VOICE_INCIDENT_ENDED":
+            result["_voice_core_incident_events_seen"] = True
+            cumulative_voice_duration = float(
+                payload.get(
+                    "cumulative_voice_duration_seconds",
+                    result.get("cumulative_voice_duration_seconds", 0.0),
                 )
-
-            # Deliberately DO NOT call AnomalyManager(active=False) here.
-            # That happens only after the full continuous-silence hold expires.
+                or 0.0
+            )
+            continuous_silence = float(
+                payload.get(
+                    "continuous_silence_seconds",
+                    result.get("silence_duration_seconds", 0.0),
+                )
+                or 0.0
+            )
+            result = _close_voice_tracking_incident(
+                result=result,
+                anomaly_manager=anomaly_manager,
+                now=now,
+                cumulative_voice_duration=cumulative_voice_duration,
+                continuous_silence=continuous_silence,
+                confirmed=bool(
+                    payload.get(
+                        "confirmed",
+                        result.get("confirmed", False),
+                    )
+                ),
+                ended_by_core=True,
+            )
             continue
 
         if event_type in {
@@ -1759,29 +1545,18 @@ def process_audio_events(
             "AUDIO_MONITOR_ERROR",
             "VOICE_DETECTION_ERROR",
         }:
-
             safe_payload = {
-                key: value
-                for (
-                    key,
-                    value,
-                ) in payload.items()
-                if (key != "evidence_audio")
+                key: value for key, value in payload.items() if key != "evidence_audio"
             }
-
-            print(
-                f"[AUDIO][{event_type}]",
-                safe_payload,
-            )
+            print(f"[AUDIO][{event_type}]", safe_payload)
 
     now = time.monotonic()
-
-    result = _finish_voice_incident_if_silent(
+    result = _legacy_finish_voice_incident_if_needed(
         result=result,
         anomaly_manager=anomaly_manager,
         now=now,
     )
-
+    result = _refresh_voice_tracking_state(result, now)
     return result
 
 
@@ -1820,7 +1595,9 @@ def print_instructions():
 
     print("  No face              -> NO_FACE")
 
-    print("  Second person        -> MULTIPLE_FACES / EXTRA_PERSON")
+    print("  Second face          -> MULTIPLE_FACES (MediaPipe Face Detector)")
+
+    print("  Second person        -> EXTRA_PERSON (YOLO)")
 
     print()
 
@@ -1864,11 +1641,13 @@ def print_instructions():
 
     print("AUDIO")
 
-    print("  Valid human speech   -> VOICE_DETECTED confirmed immediately")
+    print("  Valid human speech   -> starts TRACKING; not a violation yet")
 
-    print("  Quiet whisper        -> whisper-sensitive detection")
+    print("  Cumulative speech    -> VOICE_DETECTED only after 3.0 sec")
 
-    print("  Brief speech gaps    -> violation stays active")
+    print("  Quiet whisper        -> whisper-sensitive human-speech tracking")
+
+    print("  Pauses under 5 sec   -> same incident; pause time is NOT counted")
 
     print("  5 sec full silence   -> current voice incident ends")
 
@@ -1964,11 +1743,11 @@ def main():
 
         print("[VOICE] Voice activity detector initialized.")
 
-        print("[YUNET] Loading face detector...")
+        print("[MEDIAPIPE FACE DETECTOR] Loading face detector...")
 
-        face_detector = YuNetFaceDetector()
+        face_detector = MediaPipeFaceDetector()
 
-        print("[YUNET] Face detector loaded successfully.")
+        print("[MEDIAPIPE FACE DETECTOR] Face detector loaded successfully.")
 
         print("[FACE LANDMARKER] Loading MediaPipe Face Landmarker...")
 
@@ -2096,7 +1875,7 @@ def main():
             except Exception as error:
 
                 print(
-                    "[YUNET] Detection error:",
+                    "[MEDIAPIPE FACE DETECTOR] Detection error:",
                     error,
                 )
 
@@ -2813,7 +2592,7 @@ def main():
             except Exception as error:
 
                 print(
-                    "[YUNET] Cleanup error:",
+                    "[MEDIAPIPE FACE DETECTOR] Cleanup error:",
                     error,
                 )
 

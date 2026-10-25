@@ -4,6 +4,7 @@
 # import threading
 # import time
 # from datetime import datetime, timezone
+# from socket.proctor_socket import ProctorSocket
 
 # import psutil
 
@@ -311,16 +312,194 @@
 #     }
 
 #     OS_SCREEN_SHARING_PATH_KEYWORDS = {
-#         WINDOWS: {"zoomsharing", "\\screenshare", "\\screen_share"},
-#         MACOS: {"/screen sharing.app/", "zoomsharing", "/screenshare", "/screen_share"},
-#         LINUX: {"zoomsharing", "/screenshare", "/screen_share"},
+#         WINDOWS: {
+#             "zoomsharing",
+#             "\\screenshare",
+#             "\\screen_share",
+#         },
+#         MACOS: {
+#             "/screen sharing.app/",
+#             "zoomsharing",
+#             "/screenshare",
+#             "/screen_share",
+#         },
+#         LINUX: {
+#             "zoomsharing",
+#             "/screenshare",
+#             "/screen_share",
+#         },
 #     }
 
+#     OS_MEDIA_PROCESS_NAMES = {
+#         WINDOWS: {
+#             "windowscamera.exe",
+#             "camera.exe",
+#             "microsoft.windows.camera.exe",
+#             "soundrecorder.exe",
+#             "voicerecorder.exe",
+#             "audacity.exe",
+#             "obs64.exe",
+#             "obs32.exe",
+#             "obs.exe",
+#             "streamlabs.exe",
+#             "streamlabs desktop.exe",
+#             "zoom.exe",
+#             "teams.exe",
+#             "ms-teams.exe",
+#             "skype.exe",
+#             "skypeapp.exe",
+#             "discord.exe",
+#             "webex.exe",
+#             "webexmta.exe",
+#             "ciscowebexstart.exe",
+#             "slack.exe",
+#             "loom.exe",
+#             "loom desktop.exe",
+#             "snippingtool.exe",
+#             "gamebar.exe",
+#             "gamebarftserver.exe",
+#             "vlc.exe",
+#             "wmplayer.exe",
+#             "spotify.exe",
+#             "itunes.exe",
+#             "musicbee.exe",
+#             "foobar2000.exe",
+#             "potplayermini.exe",
+#             "potplayermini64.exe",
+#             "mpv.exe",
+#             "ffmpeg.exe",
+#             "ffplay.exe",
+#         },
+#         MACOS: {
+#             "photo booth",
+#             "facetime",
+#             "quicktime player",
+#             "voice memos",
+#             "audacity",
+#             "obs",
+#             "obs studio",
+#             "streamlabs",
+#             "zoom.us",
+#             "zoom",
+#             "microsoft teams",
+#             "teams",
+#             "discord",
+#             "skype",
+#             "webex",
+#             "slack",
+#             "loom",
+#             "vlc",
+#             "spotify",
+#             "itunes",
+#             "music",
+#             "ffmpeg",
+#             "ffplay",
+#         },
+#         LINUX: {
+#             "cheese",
+#             "guvcview",
+#             "kamoso",
+#             "audacity",
+#             "obs",
+#             "obs-studio",
+#             "simplescreenrecorder",
+#             "vokoscreenng",
+#             "zoom",
+#             "teams",
+#             "teams-for-linux",
+#             "discord",
+#             "skypeforlinux",
+#             "webex",
+#             "slack",
+#             "loom",
+#             "vlc",
+#             "spotify",
+#             "mpv",
+#             "ffmpeg",
+#             "ffplay",
+#             "arecord",
+#             "aplay",
+#             "parec",
+#             "paplay",
+#             "pw-record",
+#             "pw-play",
+#         },
+#     }
+
+#     OS_MEDIA_PATH_KEYWORDS = {
+#         WINDOWS: {
+#             "\\windowscamera\\",
+#             "\\camera\\",
+#             "\\soundrecorder\\",
+#             "\\voicerecorder\\",
+#             "\\audacity\\",
+#             "\\obs studio\\",
+#             "\\obs-studio\\",
+#             "\\streamlabs\\",
+#             "\\zoom\\",
+#             "\\teams\\",
+#             "\\microsoft teams\\",
+#             "\\discord\\",
+#             "\\skype\\",
+#             "\\webex\\",
+#             "\\slack\\",
+#             "\\loom\\",
+#             "\\vlc\\",
+#             "\\spotify\\",
+#             "\\foobar2000\\",
+#             "\\potplayer\\",
+#         },
+#         MACOS: {
+#             "/photo booth.app/",
+#             "/facetime.app/",
+#             "/quicktime player.app/",
+#             "/voice memos.app/",
+#             "/audacity.app/",
+#             "/obs.app/",
+#             "/streamlabs",
+#             "/zoom.us.app/",
+#             "/microsoft teams.app/",
+#             "/discord.app/",
+#             "/skype.app/",
+#             "/webex.app/",
+#             "/slack.app/",
+#             "/loom.app/",
+#             "/vlc.app/",
+#             "/spotify.app/",
+#         },
+#         LINUX: {
+#             "/cheese",
+#             "/guvcview",
+#             "/kamoso",
+#             "/audacity",
+#             "/obs",
+#             "/obs-studio",
+#             "/simplescreenrecorder",
+#             "/vokoscreen",
+#             "/zoom",
+#             "/teams",
+#             "/discord",
+#             "/skype",
+#             "/webex",
+#             "/slack",
+#             "/loom",
+#             "/vlc",
+#             "/spotify",
+#             "/ffmpeg",
+#             "/ffplay",
+#         },
+#     }
+
+#     MEDIA_PROCESS_NAMES = set().union(*OS_MEDIA_PROCESS_NAMES.values())
+
 #     BROWSER_PROCESS_NAMES = set().union(*OS_BROWSER_PROCESS_NAMES.values())
+
 #     REMOTE_ACCESS_PROCESS_NAMES = set().union(*OS_REMOTE_ACCESS_PROCESS_NAMES.values())
+
 #     SCREEN_SHARING_PROCESS_NAMES = set().union(
 #         *OS_SCREEN_SHARING_PROCESS_NAMES.values()
 #     )
+
 #     PROTECTED_SYSTEM_PROCESS_NAMES = set().union(
 #         *OS_PROTECTED_SYSTEM_PROCESS_NAMES.values()
 #     )
@@ -334,57 +513,161 @@
 #         terminate_screen_sharing=True,
 #         event_callback=None,
 #         strict_user_process_lockdown=False,
+#         terminate_media_processes=True,
+#         terminate_duplicate_app_instances=True,
 #     ):
 #         self.current_pid = os.getpid()
+
 #         self.operating_system = platform.system()
+
 #         self.supported_os = self.operating_system in {
 #             self.WINDOWS,
 #             self.MACOS,
 #             self.LINUX,
 #         }
 
-#         self.check_interval = max(1.0, float(check_interval))
+#         self.check_interval = max(
+#             1.0,
+#             float(check_interval),
+#         )
+
 #         self.block_external_browsers = bool(block_external_browsers)
+
 #         self.terminate_remote_access = bool(terminate_remote_access)
+
 #         self.terminate_screen_sharing = bool(terminate_screen_sharing)
+
 #         self.strict_user_process_lockdown = bool(strict_user_process_lockdown)
+
+#         self.terminate_media_processes = bool(terminate_media_processes)
+
+#         self.terminate_duplicate_app_instances = bool(terminate_duplicate_app_instances)
+
 #         self.event_callback = event_callback
 
 #         self.kiosk_root_pid = None
+
 #         self.pre_kiosk_browser_root_pids = set()
+
 #         self._stop_event = threading.Event()
+
 #         self._thread = None
+
 #         self._lock = threading.RLock()
+
 #         self._warned_missing_kiosk_pid = False
 
 #         self.browser_process_names = set(
-#             self.OS_BROWSER_PROCESS_NAMES.get(self.operating_system, set())
-#         )
-#         self.remote_access_process_names = set(
-#             self.OS_REMOTE_ACCESS_PROCESS_NAMES.get(self.operating_system, set())
-#         )
-#         self.screen_sharing_process_names = set(
-#             self.OS_SCREEN_SHARING_PROCESS_NAMES.get(self.operating_system, set())
-#         )
-#         self.protected_system_process_names = set(
-#             self.OS_PROTECTED_SYSTEM_PROCESS_NAMES.get(self.operating_system, set())
-#         )
-#         self.remote_access_path_keywords = set(
-#             self.OS_REMOTE_ACCESS_PATH_KEYWORDS.get(self.operating_system, set())
-#         )
-#         self.screen_sharing_path_keywords = set(
-#             self.OS_SCREEN_SHARING_PATH_KEYWORDS.get(self.operating_system, set())
+#             self.OS_BROWSER_PROCESS_NAMES.get(
+#                 self.operating_system,
+#                 set(),
+#             )
 #         )
 
-#         try:
-#             self.current_username = self._normalize(
-#                 psutil.Process(self.current_pid).username()
+#         self.remote_access_process_names = set(
+#             self.OS_REMOTE_ACCESS_PROCESS_NAMES.get(
+#                 self.operating_system,
+#                 set(),
 #             )
-#         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+#         )
+
+#         self.screen_sharing_process_names = set(
+#             self.OS_SCREEN_SHARING_PROCESS_NAMES.get(
+#                 self.operating_system,
+#                 set(),
+#             )
+#         )
+
+#         self.media_process_names = set(
+#             self.OS_MEDIA_PROCESS_NAMES.get(
+#                 self.operating_system,
+#                 set(),
+#             )
+#         )
+
+#         self.protected_system_process_names = set(
+#             self.OS_PROTECTED_SYSTEM_PROCESS_NAMES.get(
+#                 self.operating_system,
+#                 set(),
+#             )
+#         )
+
+#         self.remote_access_path_keywords = set(
+#             self.OS_REMOTE_ACCESS_PATH_KEYWORDS.get(
+#                 self.operating_system,
+#                 set(),
+#             )
+#         )
+
+#         self.screen_sharing_path_keywords = set(
+#             self.OS_SCREEN_SHARING_PATH_KEYWORDS.get(
+#                 self.operating_system,
+#                 set(),
+#             )
+#         )
+
+#         self.media_path_keywords = set(
+#             self.OS_MEDIA_PATH_KEYWORDS.get(
+#                 self.operating_system,
+#                 set(),
+#             )
+#         )
+
+#         self.current_username = ""
+
+#         self.current_process_name = ""
+
+#         self.current_executable = ""
+
+#         self.current_cmdline = []
+
+#         self.current_cwd = ""
+
+#         self.current_python_entrypoint = None
+
+#         try:
+#             current_process = psutil.Process(self.current_pid)
+
+#             self.current_username = self._normalize(current_process.username())
+
+#             self.current_process_name = self._normalize(current_process.name())
+
+#             self.current_executable = self._normalize_path(current_process.exe())
+
+#             try:
+#                 self.current_cmdline = list(current_process.cmdline() or [])
+
+#             except (
+#                 psutil.NoSuchProcess,
+#                 psutil.AccessDenied,
+#                 psutil.ZombieProcess,
+#             ):
+#                 self.current_cmdline = []
+
+#             try:
+#                 self.current_cwd = self._normalize_path(current_process.cwd())
+
+#             except (
+#                 psutil.NoSuchProcess,
+#                 psutil.AccessDenied,
+#                 psutil.ZombieProcess,
+#             ):
+#                 self.current_cwd = ""
+
+#             self.current_python_entrypoint = self._extract_python_entrypoint(
+#                 self.current_cmdline,
+#                 self.current_cwd,
+#             )
+
+#         except (
+#             psutil.NoSuchProcess,
+#             psutil.AccessDenied,
+#             psutil.ZombieProcess,
+#         ):
 #             self.current_username = ""
 
 #         print(
-#             f"[PROCESS MONITOR] Operating system detected: "
+#             "[PROCESS MONITOR] Operating system detected: "
 #             f"{self.operating_system or 'Unknown'}."
 #         )
 
@@ -397,16 +680,360 @@
 #         if kiosk_root_pid is not None:
 #             self.set_kiosk_root_pid(kiosk_root_pid)
 
-#     def _normalize(self, value):
+#     def _normalize(
+#         self,
+#         value,
+#     ):
 #         return str(value or "").strip().lower()
 
-#     def _safe_process_name(self, process):
-#         try:
-#             return self._normalize(process.name())
-#         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+#     def _normalize_path(
+#         self,
+#         value,
+#     ):
+#         value = str(value or "").strip()
+
+#         if not value:
 #             return ""
 
-#     def _path_matches(self, executable, keywords):
+#         try:
+#             return os.path.normcase(os.path.abspath(value))
+
+#         except Exception:
+#             return os.path.normcase(value)
+
+#     def _safe_process_executable(
+#         self,
+#         process,
+#     ):
+#         try:
+#             return self._normalize_path(process.exe())
+
+#         except (
+#             psutil.NoSuchProcess,
+#             psutil.AccessDenied,
+#             psutil.ZombieProcess,
+#         ):
+#             return ""
+
+#     def _safe_process_cmdline(
+#         self,
+#         process,
+#     ):
+#         try:
+#             return list(process.cmdline() or [])
+
+#         except (
+#             psutil.NoSuchProcess,
+#             psutil.AccessDenied,
+#             psutil.ZombieProcess,
+#         ):
+#             return []
+
+#     def _safe_process_cwd(
+#         self,
+#         process,
+#     ):
+#         try:
+#             return self._normalize_path(process.cwd())
+
+#         except (
+#             psutil.NoSuchProcess,
+#             psutil.AccessDenied,
+#             psutil.ZombieProcess,
+#         ):
+#             return ""
+
+#     def _is_python_runtime_name(
+#         self,
+#         process_name,
+#     ):
+#         process_name = self._normalize(process_name)
+
+#         if not process_name:
+#             return False
+
+#         python_names = {
+#             "python",
+#             "python.exe",
+#             "pythonw",
+#             "pythonw.exe",
+#             "python3",
+#             "python3.exe",
+#         }
+
+#         if process_name in python_names:
+#             return True
+
+#         return process_name.startswith("python")
+
+#     def _extract_python_entrypoint(
+#         self,
+#         cmdline,
+#         cwd="",
+#     ):
+#         if not isinstance(
+#             cmdline,
+#             (
+#                 list,
+#                 tuple,
+#             ),
+#         ):
+#             return None
+
+#         tokens = [
+#             str(item or "").strip() for item in cmdline if str(item or "").strip()
+#         ]
+
+#         if not tokens:
+#             return None
+
+#         for (
+#             index,
+#             token,
+#         ) in enumerate(tokens):
+#             normalized_token = self._normalize(token)
+
+#             if normalized_token == "-m" and index + 1 < len(tokens):
+#                 module_name = self._normalize(tokens[index + 1])
+
+#                 if module_name:
+#                     return (
+#                         "module",
+#                         module_name,
+#                     )
+
+#             if normalized_token.startswith("-m") and len(normalized_token) > 2:
+#                 module_name = normalized_token[2:].strip()
+
+#                 if module_name:
+#                     return (
+#                         "module",
+#                         module_name,
+#                     )
+
+#         for token in tokens[1:]:
+#             token_text = str(token).strip().strip('"').strip("'")
+
+#             if not token_text.lower().endswith(".py"):
+#                 continue
+
+#             if os.path.isabs(token_text):
+#                 script_path = self._normalize_path(token_text)
+
+#             else:
+#                 base_cwd = self._normalize_path(cwd)
+
+#                 script_path = self._normalize_path(
+#                     os.path.join(
+#                         base_cwd or os.getcwd(),
+#                         token_text,
+#                     )
+#                 )
+
+#             if script_path:
+#                 return (
+#                     "script",
+#                     script_path,
+#                 )
+
+#         return None
+
+#     def _is_same_proctor_application(
+#         self,
+#         process,
+#     ):
+#         """
+#         Return True only for another instance of this same proctor app.
+
+#         Packaged builds are matched by executable identity. Development Python
+#         launches are matched by entrypoint (for example, `python -m src.main`),
+#         never by python.exe alone, so unrelated Python processes stay allowed.
+#         """
+
+#         if process is None:
+#             return False
+
+#         try:
+#             candidate_pid = int(process.pid)
+
+#         except (
+#             TypeError,
+#             ValueError,
+#             AttributeError,
+#         ):
+#             return False
+
+#         if candidate_pid == int(self.current_pid):
+#             return False
+
+#         if not self._is_current_user_process(process):
+#             return False
+
+#         candidate_name = self._safe_process_name(process)
+
+#         candidate_executable = self._safe_process_executable(process)
+
+#         candidate_cmdline = self._safe_process_cmdline(process)
+
+#         candidate_cwd = self._safe_process_cwd(process)
+
+#         candidate_entrypoint = self._extract_python_entrypoint(
+#             candidate_cmdline,
+#             candidate_cwd,
+#         )
+
+#         current_entrypoint = self.current_python_entrypoint
+
+#         if current_entrypoint is not None and candidate_entrypoint is not None:
+#             if candidate_entrypoint == current_entrypoint:
+#                 return True
+
+#             (
+#                 current_kind,
+#                 current_value,
+#             ) = current_entrypoint
+
+#             (
+#                 candidate_kind,
+#                 candidate_value,
+#             ) = candidate_entrypoint
+
+#             module_script_pairs = {
+#                 (
+#                     "src.main",
+#                     "src/main.py",
+#                 ),
+#             }
+
+#             if current_kind == "module" and candidate_kind == "script":
+#                 candidate_script = (
+#                     str(candidate_value)
+#                     .replace(
+#                         "\\",
+#                         "/",
+#                     )
+#                     .lower()
+#                 )
+
+#                 if any(
+#                     (
+#                         current_value == module_name
+#                         and candidate_script.endswith(script_suffix)
+#                     )
+#                     for (
+#                         module_name,
+#                         script_suffix,
+#                     ) in module_script_pairs
+#                 ):
+#                     return True
+
+#             if current_kind == "script" and candidate_kind == "module":
+#                 current_script = (
+#                     str(current_value)
+#                     .replace(
+#                         "\\",
+#                         "/",
+#                     )
+#                     .lower()
+#                 )
+
+#                 if any(
+#                     (
+#                         candidate_value == module_name
+#                         and current_script.endswith(script_suffix)
+#                     )
+#                     for (
+#                         module_name,
+#                         script_suffix,
+#                     ) in module_script_pairs
+#                 ):
+#                     return True
+
+#         current_name = self._normalize(self.current_process_name)
+
+#         current_executable = self._normalize_path(self.current_executable)
+
+#         if (
+#             current_executable
+#             and candidate_executable
+#             and current_executable == candidate_executable
+#             and not self._is_python_runtime_name(current_name)
+#         ):
+#             return True
+
+#         if (
+#             current_name
+#             and candidate_name == current_name
+#             and ("skolariq" in current_name or "proctor" in current_name)
+#         ):
+#             if (
+#                 not current_executable
+#                 or not candidate_executable
+#                 or candidate_executable == current_executable
+#             ):
+#                 return True
+
+#         return False
+
+#     def _is_media_process(
+#         self,
+#         process_name,
+#         executable="",
+#     ):
+#         process_name = self._normalize(process_name)
+
+#         if process_name in self.media_process_names:
+#             return True
+
+#         if self._path_matches(
+#             executable,
+#             self.media_path_keywords,
+#         ):
+#             return True
+
+#         generic_keywords = {
+#             "camera",
+#             "webcam",
+#             "voice recorder",
+#             "voicerecorder",
+#             "sound recorder",
+#             "soundrecorder",
+#             "screen recorder",
+#             "screenrecorder",
+#             "audacity",
+#             "obs",
+#             "streamlabs",
+#             "zoom",
+#             "teams",
+#             "skype",
+#             "discord",
+#             "webex",
+#             "loom",
+#             "vlc",
+#             "spotify",
+#         }
+
+#         return any(keyword in process_name for keyword in generic_keywords)
+
+#     def _safe_process_name(
+#         self,
+#         process,
+#     ):
+#         try:
+#             return self._normalize(process.name())
+
+#         except (
+#             psutil.NoSuchProcess,
+#             psutil.AccessDenied,
+#             psutil.ZombieProcess,
+#         ):
+#             return ""
+
+#     def _path_matches(
+#         self,
+#         executable,
+#         keywords,
+#     ):
 #         executable = self._normalize(executable)
 
 #         if not executable:
@@ -420,10 +1047,17 @@
 
 #         return False
 
-#     def _is_browser(self, process_name):
+#     def _is_browser(
+#         self,
+#         process_name,
+#     ):
 #         return self._normalize(process_name) in self.browser_process_names
 
-#     def _is_remote_access(self, process_name, executable=""):
+#     def _is_remote_access(
+#         self,
+#         process_name,
+#         executable="",
+#     ):
 #         process_name = self._normalize(process_name)
 
 #         if process_name in self.remote_access_process_names:
@@ -434,7 +1068,11 @@
 #             self.remote_access_path_keywords,
 #         )
 
-#     def _is_screen_sharing(self, process_name, executable=""):
+#     def _is_screen_sharing(
+#         self,
+#         process_name,
+#         executable="",
+#     ):
 #         process_name = self._normalize(process_name)
 
 #         if process_name in self.screen_sharing_process_names:
@@ -445,21 +1083,37 @@
 #             self.screen_sharing_path_keywords,
 #         )
 
-#     def _is_current_user_process(self, process):
+#     def _is_current_user_process(
+#         self,
+#         process,
+#     ):
 #         if not self.current_username:
 #             return False
 
 #         try:
 #             process_username = self._normalize(process.username())
-#         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+
+#         except (
+#             psutil.NoSuchProcess,
+#             psutil.AccessDenied,
+#             psutil.ZombieProcess,
+#         ):
 #             return False
 
 #         return process_username == self.current_username
 
-#     def _is_system_owned_process(self, process):
+#     def _is_system_owned_process(
+#         self,
+#         process,
+#     ):
 #         try:
 #             username = self._normalize(process.username())
-#         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+
+#         except (
+#             psutil.NoSuchProcess,
+#             psutil.AccessDenied,
+#             psutil.ZombieProcess,
+#         ):
 #             return True
 
 #         if self.operating_system == self.WINDOWS:
@@ -484,6 +1138,7 @@
 
 #             if uids is not None and int(uids.real) == 0:
 #                 return True
+
 #         except (
 #             AttributeError,
 #             psutil.NoSuchProcess,
@@ -502,8 +1157,15 @@
 
 #         return False
 
-#     def _is_protected_system_process(self, process):
-#         protected_pids = {0, 1, self.current_pid}
+#     def _is_protected_system_process(
+#         self,
+#         process,
+#     ):
+#         protected_pids = {
+#             0,
+#             1,
+#             self.current_pid,
+#         }
 
 #         if self.operating_system == self.WINDOWS:
 #             protected_pids.add(4)
@@ -522,13 +1184,19 @@
 
 #         return False
 
-#     def _is_descendant_of(self, process, ancestor_pid):
+#     def _is_descendant_of(
+#         self,
+#         process,
+#         ancestor_pid,
+#     ):
 #         if not ancestor_pid:
 #             return False
 
 #         try:
 #             ancestor_pid = int(ancestor_pid)
+
 #             current = process
+
 #             visited = set()
 
 #             while current is not None:
@@ -553,7 +1221,10 @@
 
 #         return False
 
-#     def _is_kiosk_process(self, process):
+#     def _is_kiosk_process(
+#         self,
+#         process,
+#     ):
 #         with self._lock:
 #             kiosk_root_pid = self.kiosk_root_pid
 
@@ -565,7 +1236,10 @@
 #             kiosk_root_pid,
 #         )
 
-#     def _process_tree_contains_kiosk(self, process):
+#     def _process_tree_contains_kiosk(
+#         self,
+#         process,
+#     ):
 #         with self._lock:
 #             kiosk_root_pid = self.kiosk_root_pid
 
@@ -574,6 +1248,7 @@
 
 #         try:
 #             kiosk_process = psutil.Process(int(kiosk_root_pid))
+
 #         except (
 #             psutil.NoSuchProcess,
 #             psutil.AccessDenied,
@@ -588,9 +1263,14 @@
 #             process.pid,
 #         )
 
-#     def _get_browser_root(self, process):
+#     def _get_browser_root(
+#         self,
+#         process,
+#     ):
 #         current = process
+
 #         root = process
+
 #         visited = set()
 
 #         while current is not None:
@@ -601,7 +1281,12 @@
 
 #             try:
 #                 current_name = current.name()
-#             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+
+#             except (
+#                 psutil.NoSuchProcess,
+#                 psutil.AccessDenied,
+#                 psutil.ZombieProcess,
+#             ):
 #                 break
 
 #             if not self._is_browser(current_name):
@@ -611,7 +1296,12 @@
 
 #             try:
 #                 parent = current.parent()
-#             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+
+#             except (
+#                 psutil.NoSuchProcess,
+#                 psutil.AccessDenied,
+#                 psutil.ZombieProcess,
+#             ):
 #                 break
 
 #             if parent is None:
@@ -619,7 +1309,12 @@
 
 #             try:
 #                 parent_name = parent.name()
-#             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+
+#             except (
+#                 psutil.NoSuchProcess,
+#                 psutil.AccessDenied,
+#                 psutil.ZombieProcess,
+#             ):
 #                 break
 
 #             if not self._is_browser(parent_name):
@@ -629,15 +1324,31 @@
 
 #         return root
 
-#     def _build_event(self, event_type, process, action, reason=None):
+#     def _build_event(
+#         self,
+#         event_type,
+#         process,
+#         action,
+#         reason=None,
+#     ):
 #         try:
 #             process_name = process.name()
-#         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+
+#         except (
+#             psutil.NoSuchProcess,
+#             psutil.AccessDenied,
+#             psutil.ZombieProcess,
+#         ):
 #             process_name = ""
 
 #         try:
 #             executable = process.exe()
-#         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+
+#         except (
+#             psutil.NoSuchProcess,
+#             psutil.AccessDenied,
+#             psutil.ZombieProcess,
+#         ):
 #             executable = ""
 
 #         payload = {
@@ -655,7 +1366,10 @@
 
 #         return payload
 
-#     def _emit_event(self, payload):
+#     def _emit_event(
+#         self,
+#         payload,
+#     ):
 #         print(
 #             "[PROCESS MONITOR] "
 #             f"{payload.get('event_type')} "
@@ -670,8 +1384,12 @@
 
 #         try:
 #             self.event_callback(dict(payload))
+
 #         except Exception as error:
-#             print(f"[PROCESS MONITOR] Callback error: {error}")
+#             print(
+#                 "[PROCESS MONITOR] Callback error:",
+#                 error,
+#             )
 
 #     def _terminate_process_tree(
 #         self,
@@ -684,6 +1402,7 @@
 
 #         try:
 #             process = psutil.Process(int(process.pid))
+
 #         except (
 #             psutil.NoSuchProcess,
 #             psutil.AccessDenied,
@@ -704,6 +1423,7 @@
 #                 "[PROCESS MONITOR] Termination skipped because "
 #                 "the target process tree contains the secure kiosk."
 #             )
+
 #             return False
 
 #         if require_current_user and not self._is_current_user_process(process):
@@ -717,7 +1437,12 @@
 
 #         try:
 #             children = process.children(recursive=True)
-#         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+
+#         except (
+#             psutil.NoSuchProcess,
+#             psutil.AccessDenied,
+#             psutil.ZombieProcess,
+#         ):
 #             children = []
 
 #         targets = []
@@ -740,14 +1465,21 @@
 #         targets.append(process)
 
 #         terminated_any = False
+
 #         denied_any = False
 
 #         for target in targets:
 #             try:
 #                 target.terminate()
+
 #                 terminated_any = True
-#             except (psutil.NoSuchProcess, psutil.ZombieProcess):
+
+#             except (
+#                 psutil.NoSuchProcess,
+#                 psutil.ZombieProcess,
+#             ):
 #                 continue
+
 #             except psutil.AccessDenied:
 #                 denied_any = True
 
@@ -764,6 +1496,7 @@
 #                 targets,
 #                 timeout=1.5,
 #             )
+
 #         except Exception:
 #             alive = []
 
@@ -782,16 +1515,24 @@
 
 #             try:
 #                 target.kill()
+
 #                 terminated_any = True
-#             except (psutil.NoSuchProcess, psutil.ZombieProcess):
+
+#             except (
+#                 psutil.NoSuchProcess,
+#                 psutil.ZombieProcess,
+#             ):
 #                 continue
+
 #             except psutil.AccessDenied:
 #                 denied_any = True
 
 #         if terminated_any:
 #             event_payload["action"] = "terminated"
+
 #         elif denied_any:
 #             event_payload["action"] = "terminate_denied"
+
 #         else:
 #             event_payload["action"] = "not_terminated"
 
@@ -799,7 +1540,10 @@
 
 #         return terminated_any
 
-#     def set_kiosk_root_pid(self, kiosk_root_pid):
+#     def set_kiosk_root_pid(
+#         self,
+#         kiosk_root_pid,
+#     ):
 #         if kiosk_root_pid is None:
 #             with self._lock:
 #                 self.kiosk_root_pid = None
@@ -816,9 +1560,12 @@
 
 #         self._warned_missing_kiosk_pid = False
 
-#         print(f"[PROCESS MONITOR] Kiosk root PID set to {kiosk_root_pid}.")
+#         print("[PROCESS MONITOR] " f"Kiosk root PID set to {kiosk_root_pid}.")
 
-#     def _process_tree_contains_proctor(self, process):
+#     def _process_tree_contains_proctor(
+#         self,
+#         process,
+#     ):
 #         """
 #         Return True when `process` is this proctor process or an ancestor of it.
 
@@ -826,12 +1573,18 @@
 #         descendant tree. We must never target cmd.exe / powershell.exe / a launcher
 #         process when that tree currently contains this running proctor instance.
 #         """
+
 #         if process is None:
 #             return True
 
 #         try:
 #             target_pid = int(process.pid)
-#         except (TypeError, ValueError, AttributeError):
+
+#         except (
+#             TypeError,
+#             ValueError,
+#             AttributeError,
+#         ):
 #             return True
 
 #         if target_pid == int(self.current_pid):
@@ -839,6 +1592,7 @@
 
 #         try:
 #             current = psutil.Process(int(self.current_pid))
+
 #             visited = set()
 
 #             while current is not None:
@@ -874,11 +1628,13 @@
 #         but Chromium/Electron/WebView trees can be more reliably closed by the
 #         native Windows process-tree command.
 #         """
+
 #         if self.operating_system != self.WINDOWS:
 #             return False
 
 #         try:
 #             process = psutil.Process(int(process.pid))
+
 #         except (
 #             psutil.NoSuchProcess,
 #             psutil.AccessDenied,
@@ -907,6 +1663,7 @@
 
 #         try:
 #             process_name = process.name()
+
 #         except (
 #             psutil.NoSuchProcess,
 #             psutil.AccessDenied,
@@ -914,7 +1671,11 @@
 #         ):
 #             process_name = ""
 
-#         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+#         creationflags = getattr(
+#             subprocess,
+#             "CREATE_NO_WINDOW",
+#             0,
+#         )
 
 #         try:
 #             completed = subprocess.run(
@@ -932,6 +1693,7 @@
 #                 creationflags=creationflags,
 #                 check=False,
 #             )
+
 #         except Exception as error:
 #             self._emit_event(
 #                 {
@@ -945,6 +1707,7 @@
 #                     "reason": str(error),
 #                 }
 #             )
+
 #             return False
 
 #         deadline = time.monotonic() + 2.0
@@ -952,6 +1715,7 @@
 #         while time.monotonic() < deadline:
 #             if not psutil.pid_exists(pid):
 #                 break
+
 #             time.sleep(0.05)
 
 #         terminated = not psutil.pid_exists(pid)
@@ -977,16 +1741,32 @@
 
 #         return terminated
 
-#     def _collect_browser_roots_for_forced_cleanup(self):
-#         """Collect unique current-user browser roots before the exam."""
+#     def _collect_browser_roots_for_forced_cleanup(
+#         self,
+#     ):
+#         """
+#         Collect unique current-user browser roots before the exam.
+#         """
+
 #         roots = {}
 
-#         for process in psutil.process_iter(attrs=["pid", "name", "exe"]):
+#         for process in psutil.process_iter(
+#             attrs=[
+#                 "pid",
+#                 "name",
+#                 "exe",
+#             ]
+#         ):
 #             try:
 #                 if process.pid == self.current_pid:
 #                     continue
 
-#                 process_name = self._normalize(process.info.get("name", ""))
+#                 process_name = self._normalize(
+#                     process.info.get(
+#                         "name",
+#                         "",
+#                     )
+#                 )
 
 #                 if not process_name:
 #                     continue
@@ -1037,6 +1817,7 @@
 #         than psutil-only termination and closes renderer/audio processes belonging
 #         to YouTube, Spotify Web, Meet, web cameras, etc.
 #         """
+
 #         result = {
 #             "detected": [],
 #             "terminated": [],
@@ -1045,7 +1826,12 @@
 
 #         seen = set()
 
-#         for _ in range(max(1, int(max_passes))):
+#         for _ in range(
+#             max(
+#                 1,
+#                 int(max_passes),
+#             )
+#         ):
 #             roots = self._collect_browser_roots_for_forced_cleanup()
 
 #             if not roots:
@@ -1056,6 +1842,7 @@
 #             for root in roots:
 #                 try:
 #                     name = root.name()
+
 #                 except (
 #                     psutil.NoSuchProcess,
 #                     psutil.AccessDenied,
@@ -1069,10 +1856,14 @@
 #                     "category": "browser",
 #                 }
 
-#                 key = (item["pid"], self._normalize(name))
+#                 key = (
+#                     item["pid"],
+#                     self._normalize(name),
+#                 )
 
 #                 if key not in seen:
 #                     seen.add(key)
+
 #                     result["detected"].append(dict(item))
 
 #                 if self.operating_system == self.WINDOWS:
@@ -1081,6 +1872,7 @@
 #                         event_type="PRE_EXAM_BROWSER_FORCE_TERMINATED",
 #                         require_current_user=True,
 #                     )
+
 #                 else:
 #                     success = self._terminate_process_tree(
 #                         process=root,
@@ -1090,6 +1882,7 @@
 
 #                 if success or not psutil.pid_exists(int(root.pid)):
 #                     terminated_this_pass += 1
+
 #                     result["terminated"].append(dict(item))
 
 #             if settle_delay > 0:
@@ -1103,6 +1896,7 @@
 #         for root in remaining:
 #             try:
 #                 name = root.name()
+
 #             except (
 #                 psutil.NoSuchProcess,
 #                 psutil.AccessDenied,
@@ -1120,7 +1914,10 @@
 
 #         return result
 
-#     def _is_strict_lockdown_exempt(self, process):
+#     def _is_strict_lockdown_exempt(
+#         self,
+#         process,
+#     ):
 #         """
 #         Return True when a process must never be terminated by strict lockdown.
 
@@ -1137,7 +1934,12 @@
 #         try:
 #             if int(process.pid) == int(self.current_pid):
 #                 return True
-#         except (TypeError, ValueError, AttributeError):
+
+#         except (
+#             TypeError,
+#             ValueError,
+#             AttributeError,
+#         ):
 #             return True
 
 #         if self._is_protected_system_process(process):
@@ -1154,15 +1956,96 @@
 
 #         return False
 
-#     def _collect_strict_user_process_roots(self):
-#         """
-#         Collect top-level current-user application roots that are safe to close.
+#     def _classify_restricted_process(
+#         self,
+#         process,
+#         include_browsers=True,
+#         include_media=True,
+#         include_remote_access=True,
+#         include_screen_sharing=True,
+#         include_duplicate_application=True,
+#     ):
+#         if process is None:
+#             return None
 
-#         Children are intentionally omitted when their parent is also a candidate,
-#         because _terminate_process_tree() will terminate the whole tree. This is
-#         especially important for Chrome/Edge/Firefox/Electron multi-process apps.
-#         """
+#         try:
+#             if int(process.pid) == int(self.current_pid):
+#                 return None
 
+#         except (
+#             TypeError,
+#             ValueError,
+#             AttributeError,
+#         ):
+#             return None
+
+#         if not self._is_current_user_process(process):
+#             return None
+
+#         if self._is_strict_lockdown_exempt(process):
+#             return None
+
+#         process_name = self._safe_process_name(process)
+
+#         executable = self._safe_process_executable(process)
+
+#         if not process_name:
+#             return None
+
+#         if (
+#             include_duplicate_application
+#             and self.terminate_duplicate_app_instances
+#             and self._is_same_proctor_application(process)
+#         ):
+#             return "duplicate_proctor"
+
+#         if (
+#             include_remote_access
+#             and self.terminate_remote_access
+#             and self._is_remote_access(
+#                 process_name,
+#                 executable,
+#             )
+#         ):
+#             return "remote_access"
+
+#         if (
+#             include_screen_sharing
+#             and self.terminate_screen_sharing
+#             and self._is_screen_sharing(
+#                 process_name,
+#                 executable,
+#             )
+#         ):
+#             return "screen_sharing"
+
+#         if (
+#             include_media
+#             and self.terminate_media_processes
+#             and self._is_media_process(
+#                 process_name,
+#                 executable,
+#             )
+#         ):
+#             return "media"
+
+#         if (
+#             include_browsers
+#             and self.block_external_browsers
+#             and self._is_browser(process_name)
+#         ):
+#             return "browser"
+
+#         return None
+
+#     def _collect_targeted_user_process_roots(
+#         self,
+#         include_browsers=True,
+#         include_media=True,
+#         include_remote_access=True,
+#         include_screen_sharing=True,
+#         include_duplicate_application=True,
+#     ):
 #         candidates = {}
 
 #         for process in psutil.process_iter(
@@ -1174,21 +2057,75 @@
 #             ]
 #         ):
 #             try:
-#                 if process.pid == self.current_pid:
+#                 category = self._classify_restricted_process(
+#                     process=process,
+#                     include_browsers=include_browsers,
+#                     include_media=include_media,
+#                     include_remote_access=include_remote_access,
+#                     include_screen_sharing=include_screen_sharing,
+#                     include_duplicate_application=include_duplicate_application,
+#                 )
+
+#                 if category is None:
 #                     continue
 
-#                 if not self._is_current_user_process(process):
+#                 target = process
+
+#                 if category == "browser":
+#                     root = self._get_browser_root(process)
+
+#                     if root is not None:
+#                         target = root
+
+#                 if self._is_strict_lockdown_exempt(target):
 #                     continue
 
-#                 if self._is_strict_lockdown_exempt(process):
+#                 if self._process_tree_contains_proctor(target):
 #                     continue
 
-#                 candidates[int(process.pid)] = process
+#                 if self._is_kiosk_process(target):
+#                     continue
+
+#                 if self._process_tree_contains_kiosk(target):
+#                     continue
+
+#                 target_pid = int(target.pid)
+
+#                 existing = candidates.get(target_pid)
+
+#                 if existing is None:
+#                     candidates[target_pid] = (
+#                         target,
+#                         category,
+#                     )
+
+#                 else:
+#                     priority = {
+#                         "duplicate_proctor": 5,
+#                         "remote_access": 4,
+#                         "screen_sharing": 3,
+#                         "media": 2,
+#                         "browser": 1,
+#                     }
+
+#                     if priority.get(
+#                         category,
+#                         0,
+#                     ) > priority.get(
+#                         existing[1],
+#                         0,
+#                     ):
+#                         candidates[target_pid] = (
+#                             target,
+#                             category,
+#                         )
 
 #             except (
 #                 psutil.NoSuchProcess,
 #                 psutil.AccessDenied,
 #                 psutil.ZombieProcess,
+#                 TypeError,
+#                 ValueError,
 #             ):
 #                 continue
 
@@ -1196,11 +2133,19 @@
 #             return []
 
 #         candidate_pids = set(candidates.keys())
+
 #         roots = []
 
-#         for pid, process in candidates.items():
+#         for (
+#             _pid,
+#             (
+#                 process,
+#                 category,
+#             ),
+#         ) in candidates.items():
 #             try:
 #                 parent_pid = int(process.ppid())
+
 #             except (
 #                 psutil.NoSuchProcess,
 #                 psutil.AccessDenied,
@@ -1211,42 +2156,101 @@
 #                 parent_pid = None
 
 #             if parent_pid in candidate_pids:
-#                 continue
+#                 parent_category = candidates[parent_pid][1]
 
-#             roots.append(process)
+#                 if parent_category == category:
+#                     continue
+
+#             roots.append(
+#                 (
+#                     process,
+#                     category,
+#                 )
+#             )
 
 #         return roots
 
-#     def terminate_all_user_processes_before_exam(
+#     def _collect_strict_user_process_roots(
 #         self,
-#         max_passes=3,
-#         settle_delay=0.25,
 #     ):
 #         """
-#         Strict pre-exam lockdown.
+#         Backward-compatible private helper.
 
-#         This intentionally does NOT try to guess which application currently
-#         owns the microphone, camera or audio output. Instead, it closes every
-#         current-user, non-system application that is safe to terminate.
+#         Historically this returned every safe current-user application. It now
+#         returns only browser, remote-access, screen-sharing, media/camera/audio,
+#         and duplicate-proctor processes so backend/dev processes remain alive.
+#         """
 
-#         Therefore it covers:
-#         - every recognized browser instance and all of its renderer/tab trees,
-#         - browser-based camera/microphone/audio sessions,
-#         - desktop meeting/camera/recording/media applications,
-#         - Electron applications,
-#         - arbitrary third-party desktop applications,
-#         - other user-launched processes that are not part of Windows/macOS/Linux
-#           protected infrastructure.
+#         return [
+#             process
+#             for (
+#                 process,
+#                 _category,
+#             ) in self._collect_targeted_user_process_roots()
+#         ]
 
-#         The proctor process itself and the secure kiosk tree are always protected.
+#     def _event_type_for_restricted_category(
+#         self,
+#         category,
+#     ):
+#         return {
+#             "duplicate_proctor": "DUPLICATE_PROCTOR_INSTANCE_DETECTED",
+#             "remote_access": "REMOTE_ACCESS_DETECTED",
+#             "screen_sharing": "SCREEN_SHARING_DETECTED",
+#             "media": "MEDIA_DEVICE_APPLICATION_DETECTED",
+#             "browser": "EXTERNAL_BROWSER_DETECTED",
+#         }.get(
+#             category,
+#             "RESTRICTED_PROCESS_DETECTED",
+#         )
 
-#         Returns:
-#             {
-#                 "detected": [...],
-#                 "terminated": [...],
-#                 "failed": [...],
-#                 "passes": int,
-#             }
+#     def _terminate_restricted_process(
+#         self,
+#         process,
+#         category,
+#     ):
+#         event_type = self._event_type_for_restricted_category(category)
+
+#         if self.operating_system == self.WINDOWS:
+#             success = self._windows_force_kill_process_tree(
+#                 process=process,
+#                 event_type=event_type,
+#                 require_current_user=True,
+#             )
+
+#             if not success and psutil.pid_exists(int(process.pid)):
+#                 success = self._terminate_process_tree(
+#                     process=process,
+#                     event_type=event_type,
+#                     require_current_user=True,
+#                 )
+
+#             return bool(success)
+
+#         return bool(
+#             self._terminate_process_tree(
+#                 process=process,
+#                 event_type=event_type,
+#                 require_current_user=True,
+#             )
+#         )
+
+#     def terminate_targeted_processes_before_exam(
+#         self,
+#         max_passes=4,
+#         settle_delay=0.20,
+#         include_browsers=True,
+#         include_media=True,
+#         include_remote_access=True,
+#         include_screen_sharing=True,
+#         include_duplicate_application=True,
+#     ):
+#         """
+#         Close only processes that conflict with a secure proctored session.
+
+#         Normal developer/backend processes such as Node.js, terminals, IDEs,
+#         unrelated Python processes and ordinary desktop applications remain
+#         untouched. Core operating-system media services also stay protected.
 #         """
 
 #         result = {
@@ -1258,9 +2262,10 @@
 
 #         if not self.supported_os:
 #             print(
-#                 "[PROCESS MONITOR] Strict pre-exam process cleanup skipped "
+#                 "[PROCESS MONITOR] Targeted pre-exam process cleanup skipped "
 #                 "because this operating system is unsupported."
 #             )
+
 #             return result
 
 #         try:
@@ -1268,26 +2273,34 @@
 #                 1,
 #                 int(max_passes),
 #             )
-#         except (TypeError, ValueError):
-#             max_passes = 3
+
+#         except (
+#             TypeError,
+#             ValueError,
+#         ):
+#             max_passes = 4
 
 #         try:
 #             settle_delay = max(
 #                 0.0,
 #                 float(settle_delay),
 #             )
-#         except (TypeError, ValueError):
-#             settle_delay = 0.25
+
+#         except (
+#             TypeError,
+#             ValueError,
+#         ):
+#             settle_delay = 0.20
 
 #         detected_keys = set()
+
 #         terminated_keys = set()
-#         failed_keys = set()
 
 #         print()
+
 #         print(
-#             "[PROCESS MONITOR] Strict pre-exam lockdown started. "
-#             "Closing every non-system current-user application before "
-#             "camera/microphone initialization."
+#             "[PROCESS MONITOR] Targeted pre-exam cleanup started. "
+#             "Normal developer/backend processes are preserved."
 #         )
 
 #         for pass_number in range(
@@ -1296,26 +2309,32 @@
 #         ):
 #             result["passes"] = pass_number
 
-#             roots = self._collect_strict_user_process_roots()
+#             targets = self._collect_targeted_user_process_roots(
+#                 include_browsers=include_browsers,
+#                 include_media=include_media,
+#                 include_remote_access=include_remote_access,
+#                 include_screen_sharing=include_screen_sharing,
+#                 include_duplicate_application=include_duplicate_application,
+#             )
 
-#             if not roots:
-#                 print(
-#                     "[PROCESS MONITOR] Strict pre-exam cleanup complete. "
-#                     "No untrusted current-user application remains."
-#                 )
+#             if not targets:
 #                 break
 
 #             print(
-#                 "[PROCESS MONITOR] Strict cleanup pass "
+#                 "[PROCESS MONITOR] Targeted cleanup pass "
 #                 f"{pass_number}/{max_passes} "
-#                 f"| application_roots={len(roots)}"
+#                 f"| restricted_roots={len(targets)}"
 #             )
 
 #             terminated_this_pass = 0
 
-#             for process in roots:
+#             for (
+#                 process,
+#                 category,
+#             ) in targets:
 #                 try:
 #                     process_name = process.name()
+
 #                 except (
 #                     psutil.NoSuchProcess,
 #                     psutil.AccessDenied,
@@ -1323,69 +2342,45 @@
 #                 ):
 #                     process_name = ""
 
-#                 try:
-#                     executable = process.exe()
-#                 except (
-#                     psutil.NoSuchProcess,
-#                     psutil.AccessDenied,
-#                     psutil.ZombieProcess,
-#                 ):
-#                     executable = ""
+#                 executable = self._safe_process_executable(process)
 
 #                 item = {
 #                     "pid": int(process.pid),
 #                     "process_name": process_name,
 #                     "executable": executable,
+#                     "category": category,
 #                 }
 
 #                 item_key = (
 #                     item["pid"],
 #                     self._normalize(item["process_name"]),
+#                     category,
 #                 )
 
 #                 if item_key not in detected_keys:
 #                     detected_keys.add(item_key)
+
 #                     result["detected"].append(dict(item))
 
 #                 print(
-#                     "[PROCESS MONITOR] Pre-exam application detected "
+#                     "[PROCESS MONITOR] Restricted process detected "
+#                     f"| category={category} "
 #                     f"| process={process_name or 'Unknown'} "
 #                     f"| pid={process.pid}"
 #                 )
 
-#                 if self.operating_system == self.WINDOWS:
-#                     success = self._windows_force_kill_process_tree(
-#                         process=process,
-#                         event_type="PRE_EXAM_USER_PROCESS_DETECTED",
-#                         require_current_user=True,
-#                     )
-
-#                     if not success and psutil.pid_exists(int(process.pid)):
-#                         success = self._terminate_process_tree(
-#                             process=process,
-#                             event_type="PRE_EXAM_USER_PROCESS_DETECTED",
-#                             require_current_user=True,
-#                         )
-#                 else:
-#                     success = self._terminate_process_tree(
-#                         process=process,
-#                         event_type="PRE_EXAM_USER_PROCESS_DETECTED",
-#                         require_current_user=True,
-#                     )
+#                 success = self._terminate_restricted_process(
+#                     process=process,
+#                     category=category,
+#                 )
 
 #                 if success or not psutil.pid_exists(int(process.pid)):
 #                     terminated_this_pass += 1
 
 #                     if item_key not in terminated_keys:
 #                         terminated_keys.add(item_key)
+
 #                         result["terminated"].append(dict(item))
-
-#                     failed_keys.discard(item_key)
-
-#                 else:
-#                     if item_key not in failed_keys:
-#                         failed_keys.add(item_key)
-#                         result["failed"].append(dict(item))
 
 #             if settle_delay > 0.0:
 #                 time.sleep(settle_delay)
@@ -1393,15 +2388,25 @@
 #             if terminated_this_pass == 0:
 #                 break
 
-#         # Final verification. Rebuild failed from processes that still remain.
-#         remaining_roots = self._collect_strict_user_process_roots()
+#         remaining_targets = self._collect_targeted_user_process_roots(
+#             include_browsers=include_browsers,
+#             include_media=include_media,
+#             include_remote_access=include_remote_access,
+#             include_screen_sharing=include_screen_sharing,
+#             include_duplicate_application=include_duplicate_application,
+#         )
 
 #         remaining = []
+
 #         remaining_keys = set()
 
-#         for process in remaining_roots:
+#         for (
+#             process,
+#             category,
+#         ) in remaining_targets:
 #             try:
 #                 process_name = process.name()
+
 #             except (
 #                 psutil.NoSuchProcess,
 #                 psutil.AccessDenied,
@@ -1409,36 +2414,30 @@
 #             ):
 #                 process_name = ""
 
-#             try:
-#                 executable = process.exe()
-#             except (
-#                 psutil.NoSuchProcess,
-#                 psutil.AccessDenied,
-#                 psutil.ZombieProcess,
-#             ):
-#                 executable = ""
-
 #             item = {
 #                 "pid": int(process.pid),
 #                 "process_name": process_name,
-#                 "executable": executable,
+#                 "executable": self._safe_process_executable(process),
+#                 "category": category,
 #             }
 
 #             key = (
 #                 item["pid"],
 #                 self._normalize(item["process_name"]),
+#                 category,
 #             )
 
 #             if key in remaining_keys:
 #                 continue
 
 #             remaining_keys.add(key)
+
 #             remaining.append(item)
 
 #         result["failed"] = remaining
 
 #         print(
-#             "[PROCESS MONITOR] Strict pre-exam lockdown result "
+#             "[PROCESS MONITOR] Targeted pre-exam cleanup result "
 #             f"| detected={len(result['detected'])} "
 #             f"| terminated={len(result['terminated'])} "
 #             f"| remaining={len(result['failed'])}"
@@ -1447,12 +2446,35 @@
 #         if result["failed"]:
 #             for item in result["failed"]:
 #                 print(
-#                     "[PROCESS MONITOR] Unable to terminate before exam "
+#                     "[PROCESS MONITOR] Unable to terminate restricted process "
+#                     f"| category={item.get('category')} "
 #                     f"| process={item.get('process_name')} "
 #                     f"| pid={item.get('pid')}"
 #                 )
 
 #         return result
+
+#     def terminate_all_user_processes_before_exam(
+#         self,
+#         max_passes=3,
+#         settle_delay=0.25,
+#     ):
+#         """
+#         Backward-compatible legacy entry point.
+
+#         The historical name is intentionally retained, but the implementation
+#         now performs targeted lockdown rather than terminating every user app.
+#         """
+
+#         return self.terminate_targeted_processes_before_exam(
+#             max_passes=max_passes,
+#             settle_delay=settle_delay,
+#             include_browsers=True,
+#             include_media=True,
+#             include_remote_access=True,
+#             include_screen_sharing=True,
+#             include_duplicate_application=True,
+#         )
 
 #     def terminate_pre_exam_media_processes(
 #         self,
@@ -1463,114 +2485,48 @@
 #         """
 #         Backward-compatible entry point used by main.py.
 
-#         The old intent of this method was media-specific cleanup. The strict
-#         implementation is intentionally broader: regardless of these legacy
-#         flags, every safe current-user application is closed before the exam.
-
-#         Keeping the old arguments means existing callers remain compatible.
+#         Browsers, remote-access/screen-sharing apps, duplicate proctor instances,
+#         and user-space camera/microphone/audio applications are closed. Normal
+#         backend/development applications such as Node.js remain running.
 #         """
 
-#         _ = (
-#             include_camera_microphone,
-#             include_audio_playback,
-#         )
+#         include_media = bool(include_camera_microphone or include_audio_playback)
 
-#         combined = {
-#             "detected": [],
-#             "terminated": [],
-#             "failed": [],
-#             "passes": 0,
-#         }
-
-#         if include_browsers:
-#             browser_result = self.terminate_all_browsers_before_exam()
-#             combined["detected"].extend(browser_result.get("detected", []))
-#             combined["terminated"].extend(browser_result.get("terminated", []))
-
-#             if browser_result.get("failed"):
-#                 combined["failed"].extend(browser_result.get("failed", []))
-
-#         strict_result = self.terminate_all_user_processes_before_exam(
+#         return self.terminate_targeted_processes_before_exam(
 #             max_passes=4,
 #             settle_delay=0.20,
+#             include_browsers=bool(include_browsers),
+#             include_media=include_media,
+#             include_remote_access=True,
+#             include_screen_sharing=True,
+#             include_duplicate_application=True,
 #         )
-
-#         combined["detected"].extend(strict_result.get("detected", []))
-#         combined["terminated"].extend(strict_result.get("terminated", []))
-#         combined["passes"] = strict_result.get("passes", 0)
-
-#         # Final browser verification is repeated after general cleanup because
-#         # some browser helpers can briefly respawn their parent process.
-#         final_browser_result = (
-#             self.terminate_all_browsers_before_exam(
-#                 max_passes=2,
-#                 settle_delay=0.15,
-#             )
-#             if include_browsers
-#             else {"failed": []}
-#         )
-
-#         combined["detected"].extend(final_browser_result.get("detected", []))
-#         combined["terminated"].extend(final_browser_result.get("terminated", []))
-
-#         remaining_strict = self._collect_strict_user_process_roots()
-#         remaining_browsers = (
-#             self._collect_browser_roots_for_forced_cleanup() if include_browsers else []
-#         )
-
-#         failed_by_pid = {}
-
-#         for process in list(remaining_browsers) + list(remaining_strict):
-#             try:
-#                 pid = int(process.pid)
-#                 name = process.name()
-#             except (
-#                 psutil.NoSuchProcess,
-#                 psutil.AccessDenied,
-#                 psutil.ZombieProcess,
-#                 TypeError,
-#                 ValueError,
-#             ):
-#                 continue
-
-#             failed_by_pid[pid] = {
-#                 "pid": pid,
-#                 "process_name": name,
-#             }
-
-#         combined["failed"] = list(failed_by_pid.values())
-
-#         print(
-#             "[PROCESS MONITOR] Verified pre-exam cleanup "
-#             f"| detected={len(combined['detected'])} "
-#             f"| terminated={len(combined['terminated'])} "
-#             f"| remaining={len(combined['failed'])}"
-#         )
-
-#         return combined
 
 #     def enable_strict_user_process_lockdown(
 #         self,
 #         enabled=True,
 #     ):
 #         """
-#         Enable/disable strict continuous lockdown after kiosk startup.
+#         Enable/disable continuous targeted lockdown after kiosk startup.
 
-#         Default remains False for backward compatibility. When enabled, scan_once()
-#         will continuously terminate any new non-system current-user application
-#         that is not part of the secure kiosk/proctor process tree.
+#         The method name remains unchanged for backward compatibility. When
+#         enabled, scan_once() continuously removes only restricted categories:
+#         external browsers, remote access, screen sharing, media/camera/audio
+#         applications, and duplicate proctor instances.
 #         """
 
 #         self.strict_user_process_lockdown = bool(enabled)
 
 #         print(
-#             "[PROCESS MONITOR] Strict continuous user-process lockdown "
+#             "[PROCESS MONITOR] Continuous targeted process lockdown "
 #             f"{'enabled' if self.strict_user_process_lockdown else 'disabled'}."
 #         )
 
 #         return self.strict_user_process_lockdown
 
-#     def capture_pre_kiosk_browser_processes(self):
+#     def capture_pre_kiosk_browser_processes(
+#         self,
+#     ):
 #         if not self.supported_os:
 #             return []
 
@@ -1621,25 +2577,31 @@
 #             self.pre_kiosk_browser_root_pids = set(browser_roots)
 
 #         print(
-#             "[PROCESS MONITOR] Captured pre-kiosk browser roots: "
+#             "[PROCESS MONITOR] "
+#             "Captured pre-kiosk browser roots: "
 #             f"{sorted(browser_roots)}"
 #         )
 
 #         return sorted(browser_roots)
 
-#     def terminate_pre_kiosk_browser_processes(self):
+#     def terminate_pre_kiosk_browser_processes(
+#         self,
+#     ):
 #         if not self.supported_os:
 #             return []
 
 #         with self._lock:
 #             kiosk_root_pid = self.kiosk_root_pid
+
 #             browser_root_pids = list(self.pre_kiosk_browser_root_pids)
 
 #         if not kiosk_root_pid:
 #             print(
-#                 "[PROCESS MONITOR] Pre-kiosk browser termination skipped "
+#                 "[PROCESS MONITOR] "
+#                 "Pre-kiosk browser termination skipped "
 #                 "because the kiosk root PID has not been registered."
 #             )
+
 #             return []
 
 #         terminated = []
@@ -1647,6 +2609,7 @@
 #         for pid in browser_root_pids:
 #             try:
 #                 process = psutil.Process(pid)
+
 #             except (
 #                 psutil.NoSuchProcess,
 #                 psutil.AccessDenied,
@@ -1671,7 +2634,9 @@
 
 #         return terminated
 
-#     def scan_once(self):
+#     def scan_once(
+#         self,
+#     ):
 #         if not self.supported_os:
 #             return
 
@@ -1688,8 +2653,10 @@
 
 #             if strict_result.get("failed"):
 #                 print(
-#                     "[PROCESS MONITOR] Strict continuous lockdown could not "
-#                     f"terminate {len(strict_result['failed'])} process(es)."
+#                     "[PROCESS MONITOR] Continuous targeted lockdown "
+#                     "could not terminate "
+#                     f"{len(strict_result['failed'])} "
+#                     "restricted process(es)."
 #                 )
 
 #             return
@@ -1731,33 +2698,56 @@
 #                 if self._is_kiosk_process(process):
 #                     continue
 
+#                 if (
+#                     self.terminate_duplicate_app_instances
+#                     and self._is_same_proctor_application(process)
+#                 ):
+#                     self._terminate_restricted_process(
+#                         process=process,
+#                         category="duplicate_proctor",
+#                     )
+
+#                     continue
+
 #                 if self.terminate_remote_access and self._is_remote_access(
 #                     process_name,
 #                     executable,
 #                 ):
-#                     self._terminate_process_tree(
+#                     self._terminate_restricted_process(
 #                         process=process,
-#                         event_type="REMOTE_ACCESS_DETECTED",
-#                         require_current_user=True,
+#                         category="remote_access",
 #                     )
+
 #                     continue
 
 #                 if self.terminate_screen_sharing and self._is_screen_sharing(
 #                     process_name,
 #                     executable,
 #                 ):
-#                     self._terminate_process_tree(
+#                     self._terminate_restricted_process(
 #                         process=process,
-#                         event_type="SCREEN_SHARING_DETECTED",
-#                         require_current_user=True,
+#                         category="screen_sharing",
 #                     )
+
+#                     continue
+
+#                 if self.terminate_media_processes and self._is_media_process(
+#                     process_name,
+#                     executable,
+#                 ):
+#                     self._terminate_restricted_process(
+#                         process=process,
+#                         category="media",
+#                     )
+
 #                     continue
 
 #                 if self.block_external_browsers and self._is_browser(process_name):
 #                     if not kiosk_root_pid:
 #                         if not self._warned_missing_kiosk_pid:
 #                             print(
-#                                 "[PROCESS MONITOR] External-browser termination "
+#                                 "[PROCESS MONITOR] "
+#                                 "External-browser termination "
 #                                 "is waiting for the kiosk root PID."
 #                             )
 
@@ -1781,10 +2771,9 @@
 #                     if self._process_tree_contains_kiosk(root):
 #                         continue
 
-#                     self._terminate_process_tree(
+#                     self._terminate_restricted_process(
 #                         process=root,
-#                         event_type="EXTERNAL_BROWSER_DETECTED",
-#                         require_current_user=True,
+#                         category="browser",
 #                     )
 
 #             except (
@@ -1793,28 +2782,41 @@
 #                 psutil.ZombieProcess,
 #             ):
 #                 continue
-#             except Exception as error:
-#                 print(f"[PROCESS MONITOR] Scan error: {error}")
 
-#     def _run(self):
+#             except Exception as error:
+#                 print(
+#                     "[PROCESS MONITOR] Scan error:",
+#                     error,
+#                 )
+
+#     def _run(
+#         self,
+#     ):
 #         print("[PROCESS MONITOR] Started.")
 
 #         while not self._stop_event.is_set():
 #             try:
 #                 self.scan_once()
+
 #             except Exception as error:
-#                 print(f"[PROCESS MONITOR] Scan failed: {error}")
+#                 print(
+#                     "[PROCESS MONITOR] Scan failed:",
+#                     error,
+#                 )
 
 #             self._stop_event.wait(self.check_interval)
 
 #         print("[PROCESS MONITOR] Stopped.")
 
-#     def start(self):
+#     def start(
+#         self,
+#     ):
 #         if not self.supported_os:
 #             print(
 #                 "[PROCESS MONITOR] Monitor was not started because "
 #                 "this operating system is not supported."
 #             )
+
 #             return False
 
 #         with self._lock:
@@ -1833,7 +2835,10 @@
 
 #         return True
 
-#     def stop(self, timeout=3.0):
+#     def stop(
+#         self,
+#         timeout=3.0,
+#     ):
 #         self._stop_event.set()
 
 #         thread = self._thread
@@ -1855,9 +2860,10 @@
 
 #         return True
 
-#     def close(self):
+#     def close(
+#         self,
+#     ):
 #         return self.stop()
-
 
 import os
 import platform
@@ -1865,6 +2871,7 @@ import subprocess
 import threading
 import time
 from datetime import datetime, timezone
+from socket.proctor_socket import ProctorSocket
 
 import psutil
 
@@ -2375,6 +3382,7 @@ class ProcessMonitor:
         strict_user_process_lockdown=False,
         terminate_media_processes=True,
         terminate_duplicate_app_instances=True,
+        frontend_event_callback=None,
     ):
         self.current_pid = os.getpid()
 
@@ -2404,6 +3412,17 @@ class ProcessMonitor:
         self.terminate_duplicate_app_instances = bool(terminate_duplicate_app_instances)
 
         self.event_callback = event_callback
+
+        # Optional frontend-safe event callback. Unlike event_callback, this
+        # callback receives ONLY a human-readable message payload:
+        # {"message": "..."}
+        # No PID, executable path, session ID, timestamp, category, or other
+        # diagnostic information is exposed through this callback.
+        self.frontend_event_callback = frontend_event_callback
+
+        self._frontend_event_lock = threading.RLock()
+        self._frontend_last_message_times = {}
+        self._frontend_event_cooldown_seconds = 1.5
 
         self.kiosk_root_pid = None
 
@@ -3740,7 +4759,14 @@ class ProcessMonitor:
                         require_current_user=True,
                     )
 
-                if success or not psutil.pid_exists(int(root.pid)):
+                final_success = bool(success or not psutil.pid_exists(int(root.pid)))
+
+                self._emit_frontend_restricted_result(
+                    category="browser",
+                    terminated=final_success,
+                )
+
+                if final_success:
                     terminated_this_pass += 1
 
                     result["terminated"].append(dict(item))
@@ -4064,6 +5090,119 @@ class ProcessMonitor:
             "RESTRICTED_PROCESS_DETECTED",
         )
 
+    def _frontend_message_for_restricted_process(
+        self,
+        category,
+        terminated,
+    ):
+        """
+        Build the only process-monitor text intended for the assessment UI.
+
+        Important privacy/safety rule:
+        - no PID
+        - no executable path
+        - no username
+        - no process identifier
+        - no session/exam/schedule identifier
+        - no timestamp
+        - no raw diagnostic payload
+        """
+
+        category = self._normalize(category)
+
+        if category == "duplicate_proctor":
+            subject = "Another Skolariq Proctor instance"
+
+        elif category == "remote_access":
+            subject = "A remote-access application"
+
+        elif category == "screen_sharing":
+            subject = "A screen-sharing application"
+
+        elif category == "media":
+            subject = "A camera, microphone, recording, or media application"
+
+        elif category == "browser":
+            subject = "An external browser"
+
+        else:
+            subject = "A restricted application"
+
+        if terminated:
+            return f"{subject} was detected and closed for exam security."
+
+        return (
+            f"{subject} was detected but could not be closed. "
+            "Please close it before continuing the assessment."
+        )
+
+    def _emit_frontend_process_message(
+        self,
+        message,
+    ):
+        """
+        Emit a minimal frontend-safe process-monitor event.
+
+        The callback payload intentionally contains one field only:
+            {"message": "human readable text"}
+        """
+
+        message = str(message or "").strip()
+
+        if not message or not callable(self.frontend_event_callback):
+            return False
+
+        now = time.monotonic()
+
+        with self._frontend_event_lock:
+            last_time = self._frontend_last_message_times.get(message)
+
+            if (
+                last_time is not None
+                and now - last_time < self._frontend_event_cooldown_seconds
+            ):
+                return False
+
+            self._frontend_last_message_times[message] = now
+
+            # Keep the tiny deduplication cache bounded.
+            if len(self._frontend_last_message_times) > 32:
+                cutoff = now - 60.0
+                self._frontend_last_message_times = {
+                    key: value
+                    for key, value in self._frontend_last_message_times.items()
+                    if value >= cutoff
+                }
+
+        try:
+            self.frontend_event_callback(
+                {
+                    "message": message,
+                }
+            )
+
+            return True
+
+        except Exception as error:
+            print(
+                "[PROCESS MONITOR] Frontend event callback error:",
+                error,
+            )
+
+            return False
+
+    def _emit_frontend_restricted_result(
+        self,
+        category,
+        terminated,
+    ):
+        return self._emit_frontend_process_message(
+            self._frontend_message_for_restricted_process(
+                category=category,
+                terminated=bool(terminated),
+            )
+        )
+
     def _terminate_restricted_process(
         self,
         process,
@@ -4071,29 +5210,57 @@ class ProcessMonitor:
     ):
         event_type = self._event_type_for_restricted_category(category)
 
-        if self.operating_system == self.WINDOWS:
-            success = self._windows_force_kill_process_tree(
-                process=process,
-                event_type=event_type,
-                require_current_user=True,
-            )
+        success = False
 
-            if not success and psutil.pid_exists(int(process.pid)):
+        try:
+            if self.operating_system == self.WINDOWS:
+                success = self._windows_force_kill_process_tree(
+                    process=process,
+                    event_type=event_type,
+                    require_current_user=True,
+                )
+
+                if not success:
+                    try:
+                        process_still_exists = psutil.pid_exists(int(process.pid))
+                    except Exception:
+                        process_still_exists = False
+
+                    if process_still_exists:
+                        success = self._terminate_process_tree(
+                            process=process,
+                            event_type=event_type,
+                            require_current_user=True,
+                        )
+
+            else:
                 success = self._terminate_process_tree(
                     process=process,
                     event_type=event_type,
                     require_current_user=True,
                 )
 
-            return bool(success)
+            try:
+                process_still_exists = psutil.pid_exists(int(process.pid))
+            except Exception:
+                process_still_exists = False
 
-        return bool(
-            self._terminate_process_tree(
-                process=process,
-                event_type=event_type,
-                require_current_user=True,
+            final_success = bool(success or not process_still_exists)
+
+            self._emit_frontend_restricted_result(
+                category=category,
+                terminated=final_success,
             )
-        )
+
+            return final_success
+
+        except Exception:
+            self._emit_frontend_restricted_result(
+                category=category,
+                terminated=False,
+            )
+
+            raise
 
     def terminate_targeted_processes_before_exam(
         self,
@@ -4487,6 +5654,11 @@ class ProcessMonitor:
                 process=process,
                 event_type="LAUNCH_BROWSER_TERMINATED",
                 require_current_user=True,
+            )
+
+            self._emit_frontend_restricted_result(
+                category="browser",
+                terminated=bool(success),
             )
 
             if success:
